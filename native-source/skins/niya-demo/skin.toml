@@ -1,0 +1,109 @@
+# 水杉输入法官方外部皮肤样例：演示候选框的装饰图、背景图、自定义圆角、配色和工具栏样式。
+# 所有图片路径都相对于本皮肤目录，且必须留在目录之内。
+schema_version = 1
+id = "niya-demo"
+name = "Niya Demo"
+version = "0.3.0"
+author = "Metasequoia IME contributors"
+description = "天元突破·妮娅：卡片上方右对齐的人物装饰、带星点的背景图、12dip 圆角，以及配套的悬浮工具栏配色。"
+base = "fluent"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+# 卡片的最小宽度；实际最小宽度还会被装饰图的 width_dip 撑大。
+min_width_dip = 176
+# 候选框圆角，0–32。不写则沿用 base 皮肤的圆角。
+corner_radius_dip = 12
+# 选中 / 悬停高亮的圆角，0–16；贴着卡片四角的角仍跟 corner_radius_dip。
+item_corner_radius_dip = 6
+# 卡片阴影：none | soft | strong，只影响候选卡片。
+shadow = "soft"
+# 还可以写 border_width_dip（外框线宽，0–4）和 font_family（候选字体，排在用户字体前面，缺字时回落）。
+
+# 卡片上方的装饰图。不需要装饰就整张表不写；写了就必须给出 image、top_inset_dip 和 width_dip。
+# 图片在 width_dip × top_inset_dip 的框里等比缩放，框贴在卡片上方，不与卡片重叠。
+[candidate_window.decoration]
+image = "assets/character.png"
+top_inset_dip = 88
+width_dip = 102        # 与 408×353 的原图比例一致，框里不留空白
+align = "right"        # left | center | right，相对卡片
+
+# 卡片背景图，画在底色之上、文字之下，按圆角裁剪。背景图对深浅两套主题都生效，
+# 所以这里用的是大部分透明的纹理，而不是一张实心图。
+[candidate_window.background]
+image = "assets/background.png"
+fit = "cover"          # cover（铺满裁切）| contain（完整显示）| stretch（拉伸）
+opacity = 0.3          # 0–1
+
+[candidate.dark]
+accent = "#e08aa8"
+selected = "rgba(224, 138, 168, 0.28)"
+hover = "rgba(224, 138, 168, 0.16)"
+translation = "#9d68d3"          # 翻译文字，不写时取候选文字色的 62% 不透明度
+translation_pos = "#e255a180"    # 翻译里的词性（n. / adj. …），不写时与翻译同色
+translation_separator = "#9d68d373" # 义项分隔符（; / ；），不写时与翻译同色
+selected_translation = "#c4a4e5"
+selected_translation_pos = "#e255a180"
+selected_translation_separator = "#c4a4e573"
+# 细分配色，都可省略：不写时文字色回落到 text，光标和选中竖条回落到 accent。
+preedit_text = "#f0b8cb"
+selected_text = "#fff4f8"
+preedit_background = "rgba(224, 138, 168, 0.10)"
+preedit_divider = "rgba(224, 138, 168, 0.30)"
+
+# 候选窗右键菜单：background、border、text、hover。
+[candidate.dark.menu]
+background = "#221a1e"
+border = "rgba(224, 138, 168, 0.38)"
+text = "#f6e4eb"
+hover = "rgba(224, 138, 168, 0.20)"
+
+[candidate.light]
+accent = "#c45c7a"
+selected = "rgba(196, 92, 122, 0.18)"
+hover = "rgba(196, 92, 122, 0.10)"
+translation = "#9065b0"
+translation_pos = "#ad1a7280"
+translation_separator = "#9065b073"
+selected_translation = "#795594"
+selected_translation_pos = "#ad1a7280"
+selected_translation_separator = "#79559473"
+surface = "#fff7fa"
+border = "rgba(176, 80, 110, 0.22)"
+preedit_text = "#9c3f5c"
+preedit_divider = "rgba(176, 80, 110, 0.22)"
+
+[candidate.light.menu]
+background = "#fff7fa"
+border = "rgba(176, 80, 110, 0.22)"
+text = "#3a2a30"
+hover = "rgba(196, 92, 122, 0.12)"
+
+# 悬浮工具栏。键都可省略，不写的沿用 base 皮肤；D2D 与 WebView2 两个渲染器都生效。
+# 可用键：background、border、handle（左侧拖动条）、divider、icon、hover。
+[toolbar]
+corner_radius_dip = 8  # 0–32
+
+[toolbar.dark]
+background = "#221a1e"
+border = "rgba(224, 138, 168, 0.38)"
+handle = "#e08aa8"
+divider = "rgba(224, 138, 168, 0.30)"
+icon = "#f6e4eb"
+hover = "rgba(224, 138, 168, 0.20)"
+
+[toolbar.light]
+background = "#fff7fa"
+border = "rgba(176, 80, 110, 0.22)"
+handle = "#c45c7a"
+divider = "rgba(176, 80, 110, 0.22)"
+icon = "#3a2a30"
+hover = "rgba(196, 92, 122, 0.12)"
+
+[license]
+code = "MIT"
+assets = "UNVERIFIED-DEMO-ONLY"
+source = "Replace this value with the asset source and permission before publishing."

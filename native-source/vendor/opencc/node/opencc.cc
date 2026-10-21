@@ -1,0 +1,273 @@
+#include <napi.h>
+#include <memory>
+#include <string>
+#include <string_view>
+
+#include "src/Config.hpp"
+#include "src/Converter.hpp"
+#include "src/DictConverter.hpp"
+#include "src/Exception.hpp"
+#include "src/ResourceProvider.hpp"
+
+using namespace opencc;
+
+std::string ToUtf8String(const Napi::Value& val) {
+  return val.As<Napi::String>().Utf8Value();
+}
+
+class OpenccBinding : public Napi::ObjectWrap<OpenccBinding> {
+  class ConvertWorker : public Napi::AsyncWorker {
+    OpenccBinding* instance_;
+    std::string input_;
+    std::string output_;
+
+  public:
+    ConvertWorker(OpenccBinding* instance, const std::string& input,
+                  const Napi::Function& callback)
+        : Napi::AsyncWorker(callback, "opencc:convert-async-cb"),
+          instance_(instance), input_(input) {
+      instance_->Ref();
+    }
+
+    ~ConvertWorker() override {
+      instance_->Unref();
+    }
+
+    void Execute() override {
+      try {
+        output_ = instance_->Convert(input_);
+      } catch (opencc::Exception& e) {
+        SetError(e.what());
+      }
+    }
+
+    void OnOK() override {
+      Callback().Call({Env().Undefined(), Napi::String::New(Env(), output_)});
+    }
+
+    void OnError(const Napi::Error& e) override {
+      Callback().Call({Napi::String::New(Env(), e.Message()),
+                       Napi::String::New(Env(), "")});
+    }
+  };
+
+  Config config_;
+  ConverterPtr converter_;
+
+public:
+  explicit OpenccBinding(const Napi::CallbackInfo& info)
+      : Napi::ObjectWrap<OpenccBinding>(info), config_(), converter_() {
+    Napi::Env env = info.Env();
+
+    if (info.Length() >= 3 && info[0].IsString() && info[1].IsString() &&
+        info[2].IsBoolean()) {
+      // Three-argument mode:
+      // NewFromFile(configFileName, ZipResourceProvider(resourceZipFileName)).
+      const std::string configFile = ToUtf8String(info[0]);
+      const std::string resourceZipFile = ToUtf8String(info[1]);
+      ConfigLoadOptions options;
+      options.includeTofuRiskDictionaries =
+          info[2].As<Napi::Boolean>().Value();
+      try {
+        std::shared_ptr<ResourceProvider> provider(
+            new ZipResourceProvider(resourceZipFile));
+        converter_ = config_.NewFromFile(configFile, provider, options);
+      } catch (opencc::Exception& e) {
+        Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+      }
+      return;
+    }
+
+    if (info.Length() >= 2 && info[0].IsString() && info[1].IsString()) {
+      // Two-argument mode: NewFromString(jsonString, configDirectory)
+      // Used by the JS layer to pass patched JSON with absolute paths.
+      const std::string json = ToUtf8String(info[0]);
+      const std::string configDir = ToUtf8String(info[1]);
+      try {
+        converter_ = config_.NewFromString(json, configDir);
+      } catch (opencc::Exception& e) {
+        Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+      }
+      return;
+    }
+
+    // Single-argument mode: NewFromFile(configFilePath)
+    std::string configFile = "s2t.json";
+    if (info.Length() >= 1) {
+      if (!info[0].IsString()) {
+        Napi::TypeError::New(env, "Wrong arguments")
+            .ThrowAsJavaScriptException();
+        return;
+      }
+      configFile = ToUtf8String(info[0]);
+    }
+
+    try {
+      converter_ = config_.NewFromFile(configFile);
+    } catch (opencc::Exception& e) {
+      Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    }
+  }
+
+  ~OpenccBinding() override {}
+
+  std::string Convert(std::string_view input) {
+    return converter_->Convert(input);
+  }
+
+  ConverterPtr GetConverter() const { return converter_; }
+
+  static Napi::Value Version(const Napi::CallbackInfo& info) {
+    return Napi::String::New(info.Env(), OPENCC_VERSION);
+  }
+
+  Napi::Value Convert(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2 || !info[0].IsString() || !info[1].IsFunction()) {
+      Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+
+    ConvertWorker* worker =
+        new ConvertWorker(this, ToUtf8String(info[0]),
+                          info[1].As<Napi::Function>());
+    worker->Queue();
+    return env.Undefined();
+  }
+
+  Napi::Value ConvertSync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsString()) {
+      Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+
+    const std::string input = ToUtf8String(info[0]);
+    std::string output;
+    try {
+      output = Convert(std::string_view(input));
+    } catch (opencc::Exception& e) {
+      Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+
+    return Napi::String::New(env, output);
+  }
+
+  static Napi::Value GenerateDict(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 4 || !info[0].IsString() || !info[1].IsString() ||
+        !info[2].IsString() || !info[3].IsString()) {
+      Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    const std::string inputFileName = ToUtf8String(info[0]);
+    const std::string outputFileName = ToUtf8String(info[1]);
+    const std::string formatFrom = ToUtf8String(info[2]);
+    const std::string formatTo = ToUtf8String(info[3]);
+    try {
+      opencc::ConvertDictionary(inputFileName, outputFileName, formatFrom,
+                                formatTo);
+    } catch (opencc::Exception& e) {
+      Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    }
+    return env.Undefined();
+  }
+
+  static Napi::Object Init(Napi::Env env, Napi::Object exports) {
+    Napi::Function cons = DefineClass(
+        env, "Opencc",
+        {
+            StaticMethod("version", &OpenccBinding::Version),
+            StaticMethod("generateDict", &OpenccBinding::GenerateDict),
+            InstanceMethod("convert", &OpenccBinding::Convert),
+            InstanceMethod("convertSync", &OpenccBinding::ConvertSync),
+        });
+    exports.Set("Opencc", cons);
+    return exports;
+  }
+};
+
+class OpenccStreamBinding : public Napi::ObjectWrap<OpenccStreamBinding> {
+  std::unique_ptr<ConverterStream> stream_;
+
+public:
+  explicit OpenccStreamBinding(const Napi::CallbackInfo& info)
+      : Napi::ObjectWrap<OpenccStreamBinding>(info), stream_() {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsObject()) {
+      Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+      return;
+    }
+
+    OpenccBinding* owner =
+        Napi::ObjectWrap<OpenccBinding>::Unwrap(info[0].As<Napi::Object>());
+    stream_.reset(new ConverterStream(owner->GetConverter()));
+  }
+
+  Napi::Value ConvertChunk(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || (!info[0].IsBuffer() && !info[0].IsString())) {
+      Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+
+    try {
+      std::string output;
+      if (info[0].IsBuffer()) {
+        Napi::Buffer<char> input = info[0].As<Napi::Buffer<char>>();
+        output = stream_->ConvertChunk({input.Data(), input.Length()});
+      } else {
+        const std::string input = ToUtf8String(info[0]);
+        output = stream_->ConvertChunk(input);
+      }
+      return Napi::String::New(env, output);
+    } catch (opencc::Exception& e) {
+      Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+  }
+
+  Napi::Value Finish(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() >= 1 && !info[0].IsBuffer() && !info[0].IsString()) {
+      Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+
+    try {
+      if (info.Length() >= 1 && info[0].IsBuffer()) {
+        Napi::Buffer<char> input = info[0].As<Napi::Buffer<char>>();
+        return Napi::String::New(
+            env, stream_->Finish({input.Data(), input.Length()}));
+      }
+      if (info.Length() >= 1) {
+        const std::string input = ToUtf8String(info[0]);
+        return Napi::String::New(env, stream_->Finish(input));
+      }
+      return Napi::String::New(env, stream_->Finish());
+    } catch (opencc::Exception& e) {
+      Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+  }
+
+  static Napi::Object Init(Napi::Env env, Napi::Object exports) {
+    Napi::Function cons = DefineClass(
+        env, "OpenccStream",
+        {
+            InstanceMethod("convertChunk", &OpenccStreamBinding::ConvertChunk),
+            InstanceMethod("finish", &OpenccStreamBinding::Finish),
+        });
+    exports.Set("OpenccStream", cons);
+    return exports;
+  }
+};
+
+Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
+  OpenccBinding::Init(env, exports);
+  OpenccStreamBinding::Init(env, exports);
+  return exports;
+}
+
+NODE_API_MODULE(opencc, InitAll);

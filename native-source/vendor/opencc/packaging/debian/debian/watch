@@ -1,0 +1,9 @@
+Version: 5
+
+Source: https://github.com/byvoid/@PACKAGE@/tags
+Matching-Pattern: (?:.*?/)?(?:ver\.)?@ANY_VERSION@@ARCHIVE_EXT@
+Dversion-Mangle: s/\+ds\d?$//
+Filename-Mangle: s%(?:.*?)?v?(\d[\d.]*)\.tar\.gz%@PACKAGE@-$1.tar.gz%
+Repack: yes
+Repack-Suffix: +ds1
+Update-Script: uupdate

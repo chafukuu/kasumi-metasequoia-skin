@@ -1,0 +1,202 @@
+name: Windows Release for WinGet
+run-name: Windows Release for WinGet${{ !startsWith(github.ref, 'refs/tags/') && ' (build only)' || '' }}
+
+on:
+  push:
+    tags:
+      - "ver.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version or tag, for example 1.2.0, 1.2.1-rc1, 1.2.1-alpha1, or ver.1.2.0"
+        required: false
+      sign_windows_binaries:
+        description: "Sign Windows binaries with SignPath before packaging (tag builds always sign)"
+        required: true
+        type: boolean
+        default: false
+      signpath_signing_policy_slug:
+        description: "SignPath signing policy to use when signing is enabled"
+        required: true
+        type: choice
+        options:
+          - release-signing
+          - test-signing
+        default: release-signing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SIGNPATH_PROJECT_SLUG: OpenCC
+
+jobs:
+  build-release:
+    runs-on: windows-2022
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          GIT_REF_TYPE: ${{ github.ref_type }}
+          GIT_REF_NAME: ${{ github.ref_name }}
+        run: |
+          $value = $env:INPUT_VERSION
+          if (-not $value -and $env:GIT_REF_TYPE -eq "tag") {
+            $value = $env:GIT_REF_NAME
+          }
+          if (-not $value) {
+            $clean = ""
+          } elseif ($value.StartsWith("ver.")) {
+            $clean = $value.Substring(4)
+          } elseif ($value.StartsWith("v")) {
+            $clean = $value.Substring(1)
+          } else {
+            $clean = $value
+          }
+          "value=$clean" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build portable release staging
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          ./scripts/release-windows-winget.ps1 `
+            -Version "$env:RELEASE_VERSION" `
+            -OutputDir release `
+            -GitHubRepository "$env:GITHUB_REPO" `
+            -PackageIdentifier "BYVoid.OpenCC" `
+            -Publisher "BYVoid" `
+            -PrepareOnly
+
+      - name: Create unsigned SignPath input
+        if: ${{ inputs.sign_windows_binaries || startsWith(github.ref, 'refs/tags/') }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release/signpath | Out-Null
+          Compress-Archive `
+            -Path "release/staging/*" `
+            -DestinationPath "release/signpath/opencc-winget-portable-win32-x64.zip" `
+            -CompressionLevel Optimal
+
+      - name: Upload unsigned SignPath input
+        if: ${{ inputs.sign_windows_binaries || startsWith(github.ref, 'refs/tags/') }}
+        id: upload-unsigned-signpath-input
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-opencc-winget-portable-win32-x64
+          path: release/signpath/opencc-winget-portable-win32-x64.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Submit SignPath signing request
+        if: ${{ inputs.sign_windows_binaries || startsWith(github.ref, 'refs/tags/') }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ inputs.signpath_signing_policy_slug || 'release-signing' }}
+          artifact-configuration-slug: opencc-winget-portable-win32-x64
+          github-artifact-id: ${{ steps.upload-unsigned-signpath-input.outputs.artifact-id }}
+          wait-for-completion: true
+          # The release-signing policy requires a human approver; the action's
+          # 600s default is not enough to notice the request and approve it.
+          wait-for-completion-timeout-in-seconds: 1800
+          skip-decompress: true
+          output-artifact-directory: release/signpath-signed
+
+      - name: Restore signed portable staging
+        if: ${{ inputs.sign_windows_binaries || startsWith(github.ref, 'refs/tags/') }}
+        shell: pwsh
+        run: |
+          $signedRoot = "release/signpath-signed"
+          $stagingRoot = "release/staging"
+          $signedZip = Get-ChildItem -Path $signedRoot -Filter "*.zip" -Recurse | Select-Object -First 1
+          $signedContentRoot = Get-ChildItem -Path $signedRoot -Directory -Recurse |
+            Where-Object { Test-Path (Join-Path $_.FullName "bin") } |
+            Select-Object -First 1
+
+          Remove-Item -Recurse -Force $stagingRoot -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
+
+          if ($signedZip) {
+            Expand-Archive -Path $signedZip.FullName -DestinationPath $stagingRoot -Force
+          } elseif (Test-Path (Join-Path $signedRoot "bin")) {
+            Copy-Item -Path (Join-Path $signedRoot "*") -Destination $stagingRoot -Recurse -Force
+          } elseif ($signedContentRoot) {
+            Copy-Item -Path (Join-Path $signedContentRoot.FullName "*") -Destination $stagingRoot -Recurse -Force
+          } else {
+            throw "Unable to locate signed portable archive or extracted staging files under $signedRoot."
+          }
+
+      - name: Verify signed portable files
+        if: ${{ inputs.sign_windows_binaries || startsWith(github.ref, 'refs/tags/') }}
+        shell: pwsh
+        run: |
+          $files = @(
+            "release/staging/bin/opencc.exe",
+            "release/staging/bin/opencc_dict.exe",
+            "release/staging/bin/opencc_phrase_extract.exe"
+          ) + (Get-ChildItem "release/staging/bin/plugins" -Filter "*.dll" | ForEach-Object { $_.FullName })
+
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -FilePath $file
+            if ($signature.SignerCertificate -eq $null) {
+              throw "Missing Authenticode signature: $file"
+            }
+            Write-Host "$file signed by $($signature.SignerCertificate.Subject); status: $($signature.Status)"
+          }
+
+      - name: Build portable release and WinGet manifests
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          ./scripts/release-windows-winget.ps1 `
+            -Version "$env:RELEASE_VERSION" `
+            -OutputDir release `
+            -GitHubRepository "$env:GITHUB_REPO" `
+            -PackageIdentifier "BYVoid.OpenCC" `
+            -Publisher "BYVoid" `
+            -PackageOnly
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: opencc-winget-release-${{ steps.version.outputs.value }}
+          path: |
+            release/*.zip
+            release/*.sha256
+            release/winget-manifests/**
+
+      - name: Upload to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          for i in $(seq 1 30); do
+            gh release view "$tag" --json isDraft > /dev/null 2>&1 && break
+            echo "Waiting for release $tag to be created ($i/30)..."
+            sleep 10
+          done
+          gh release upload "$tag" \
+            release/*.zip release/*.sha256 \
+            --clobber

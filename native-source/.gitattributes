@@ -1,0 +1,25 @@
+# Line endings are decided here rather than by each contributor's core.autocrlf. The repository is
+# already predominantly LF -- 382 text files against 50 -- and the stragglers are what break CI: an
+# edit made on macOS or Linux writes LF lines into one of the CRLF files, and clang-format rejects
+# the resulting mix. That is what took `quality / Workflow validation` red on KeyStateCategory.h,
+# where three lines out of a CRLF file had arrived as LF.
+* text=auto eol=lf
+
+# Declared rather than left to git's binary heuristic, which only samples the first 8000 bytes.
+# user_dict.dat is a 40-byte seed that is almost entirely NUL, so the heuristic does catch it today,
+# but a larger one written later would not be caught by a sample of its head.
+*.dat binary
+*.ico binary
+*.mp3 binary
+*.onnx binary
+*.png binary
+# Skin images, animated ones included (schema 2 skins accept APNG, GIF and WebP).
+*.apng binary
+*.gif binary
+*.webp binary
+
+# The vendored Google Pinyin dictionary sources are UTF-16 and carry a .txt suffix. The heuristic
+# does classify them today, on the NUL bytes UTF-16 puts in every ASCII character, but they are
+# declared for the same reason user_dict.dat is: sampling the head is not a guarantee, and a .txt
+# that silently normalizes to LF is a corrupt dictionary rather than a formatting change.
+engine/googlepinyinime-rev/data/*utf16*.txt binary

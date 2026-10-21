@@ -1,0 +1,19 @@
+{
+  "name": "metasequoia-ime-engine",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "boost-algorithm",
+    "fmt",
+    "spdlog",
+    "sqlite3"
+  ],
+  "features": {
+    "voice": {
+      "description": "Optional shared VoiceInput",
+      "dependencies": [
+        "curl",
+        "nlohmann-json"
+      ]
+    }
+  }
+}

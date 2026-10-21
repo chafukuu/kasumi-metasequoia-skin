@@ -1,0 +1,107 @@
+schema_version = 2
+id = "kasumi-adaptive"
+name = "Kasumi Adaptive"
+version = "0.5.3"
+author = "Kasumi"
+description = "Fixed artwork at 0.75 of v0.5.2; font 15, right portrait 90% and raised 10 DIP. Native item edges drive frets."
+base = "canvas"
+
+[supports]
+layouts = ["horizontal"]
+themes = ["light", "dark"]
+
+[candidate_window]
+# Include the portrait's reserved width in the card so screen placement keeps it visible.
+min_width_dip = 693.0292817679558
+max_width_dip = 1032
+# Reserve the longest ribbon at composition start so growth stays on the right.
+reserve_max_width = true
+fit_content = true
+corner_radius_dip = 0
+border_width_dip = 0
+item_corner_radius_dip = 0
+shadow = "none"
+backdrop = "none"
+font_family = "SimHei"
+page_arrows = false
+line_gap_dip = 0
+
+[candidate_window.item_separators]
+color = "#ffad00"
+top_dip = 6.75
+bottom_dip = 38.25
+line_width_dip = 0.4875
+line_gap_dip = 1.05
+
+[candidate_window.band_artwork]
+background = "assets/native-band-background.png"
+foreground = "assets/native-band-foreground.png"
+width_dip = 1032
+height_dip = 344
+offset_y_dip = -219.75
+foreground_right_clip_dip = 137.6950276243094
+
+# 15 DIP candidate text is supplied by the installing wrapper.
+[candidate_window.horizontal]
+single_line = true
+item_min_width = 54
+item_gap = 0
+number_inset = 5.625
+number_gap = 4.5
+number_scale = 0.75
+justify_rows = false
+item_extra_height = 0
+
+[candidate_window.content_insets_dip]
+# Raise the text by 1.5 DIP without moving the artwork or changing card height.
+top = 11.25
+bottom = 63
+left = 111.65745856353591
+right = 203.37182320441988
+
+# The portrait footprint is reserved inside content padding, not outside the card.
+# The whole artwork (portrait, guitar and stars) is drawn by the helper.
+[candidate_window.outer_insets_dip]
+top = 146.25
+bottom = 0
+left = 0
+right = 0
+
+# No [[candidate_window.decorations]] here: direct-source mode owns every
+# artwork pixel; the native layer draws text and its synchronized separators.
+
+[candidate.light]
+surface = "transparent"
+border = "transparent"
+text = "#78300c"
+candidate_text = "#78300c"
+number = "#78300c"
+accent = "#f59a16"
+selected = "transparent"
+hover = "transparent"
+show_selected_bar = false
+selected_text = "#78300c"
+selected_number = "#78300c"
+preedit_text = "transparent"
+preedit_background = "transparent"
+preedit_divider = "transparent"
+
+[candidate.dark]
+surface = "transparent"
+border = "transparent"
+text = "#78300c"
+candidate_text = "#78300c"
+number = "#78300c"
+accent = "#f59a16"
+selected = "transparent"
+hover = "transparent"
+show_selected_bar = false
+selected_text = "#78300c"
+selected_number = "#78300c"
+preedit_text = "transparent"
+preedit_background = "transparent"
+preedit_divider = "transparent"
+
+[license]
+code = "MIT"
+assets = "User-provided artwork"

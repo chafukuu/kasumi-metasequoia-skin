@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "package": "kasumi-metasequoia-skin",
+  "displayName": "Kasumi Adaptive for Metasequoia IME 0.11.1",
+  "version": "0.5.3",
+  "createdUtc": "2026-10-21T08:49:20Z",
+  "minimumImeVersion": "0.11.1",
+  "native": {
+    "path": "native/MetasequoiaImeServer.exe",
+    "size": 10249728,
+    "sha256": "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C",
+    "helperRequired": false
+  },
+  "skin": {
+    "id": "kasumi-adaptive",
+    "version": "0.5.3",
+    "directory": "skin/kasumi-adaptive",
+    "helperRequired": false,
+    "bands": "native",
+    "features": [
+      "band_artwork",
+      "item_separators",
+      "horizontal_single_line"
+    ]
+  },
+  "compatibleInstalledServerSha256": [
+    "448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3",
+    "C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA"
+  ],
+  "config": {
+    "mergeOnly": true,
+    "changedKeys": [
+      "appearance.candidate_skin",
+      "appearance.candidate_window_fit_content",
+      "appearance.candidate_window_layout",
+      "appearance.candidate_window_single_line",
+      "appearance.candidate_window_preedit_style",
+      "appearance.font_size",
+      "appearance.page_size"
+    ],
+    "note": "All other config keys, comments and line endings are left untouched."
+  },
+  "files": [
+    {
+      "path": "native/MetasequoiaImeServer.exe",
+      "size": 10249728,
+      "sha256": "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/band-display.png",
+      "size": 282448,
+      "sha256": "5D9F3E0EB4AFD334205C57829653C308494C9B43A1C0C59D8DB63ACC864F0545"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/band.png",
+      "size": 286937,
+      "sha256": "2FEF6FD48CDB25A2D9DE4B7E40DB9EBA3F83CDB893A271E8CF4EF906FA2D311F"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/chibi.png",
+      "size": 121855,
+      "sha256": "2041E3754BDF9EA260962EA7398108E7BD1F24F3AF677A4AD2049E5E3FD4164A"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/livesd-idle.png",
+      "size": 1186068,
+      "sha256": "CB784902EE323E741E63012E56C9C61CF3DD81074D15198646BC72EB6322B764"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/native-band-background.png",
+      "size": 409463,
+      "sha256": "EDBC69B8C487CAE4BF7746CCD7D5E11FAEED53053B10C50F8C26171AE023E4FA"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/native-band-foreground.png",
+      "size": 403170,
+      "sha256": "93B3A90CBA3BC8413187075D9FF85DD5AC92B81158BD9AE9121D9BA5D41E6769"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/portrait.png",
+      "size": 1538153,
+      "sha256": "E771347739F2FA2F6F53111C9E1D368D3C4A6E24309474175F6A5FC82590093F"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/source-exclusions.json",
+      "size": 14777,
+      "sha256": "FC8B94D27F00EF3D83E227A6EAAA208934D327DC1885F9C80BC7C5301347E403"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/source-foreground.json",
+      "size": 31665,
+      "sha256": "C54782E20D47E9B88AC8D6EB75113371C0334B4999EB1E504A4F9A7E994350D9"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/source-longest.png",
+      "size": 1073293,
+      "sha256": "C2C798CC2896C3C23A09ED24DB5C926280616CDA380D6ABA6098EC0A499B25C4"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/source-portrait.json",
+      "size": 15793,
+      "sha256": "D0003B2B5F3E61652286972C589A42F9C233568DEC73C848724D3B5D286FF51D"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/source-white-restore.json",
+      "size": 318,
+      "sha256": "33CC7E96E135466FDFE66071DE35706015037D472A7A41DD0DA72FE4E83410DD"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/star_m.png",
+      "size": 9221,
+      "sha256": "6716AD2490DC58F9FCFBC585D71266C14AACC53755AAFCFB946ECA326BD8E247"
+    },
+    {
+      "path": "skin/kasumi-adaptive/assets/star_y.png",
+      "size": 4401,
+      "sha256": "538F9DB478244B64BE572E6604ACF012B68CA263EF69DA0632F4A9E1359D10D8"
+    },
+    {
+      "path": "skin/kasumi-adaptive/band-overlay.json",
+      "size": 1002,
+      "sha256": "F4B14A8E1795AFB83129E09BDC72C9AA7DC661AB3892341A4703880F737D6233"
+    },
+    {
+      "path": "skin/kasumi-adaptive/clip.json",
+      "size": 640,
+      "sha256": "1CFE9A672A5F87AACED74AD0ED2DAAB1FFA17923681950BA5B31C28A3EA7C3BC"
+    },
+    {
+      "path": "skin/kasumi-adaptive/skin.toml",
+      "size": 2866,
+      "sha256": "BB3B8F30FE53C5F5724996B690C4843B83DA5537B6AF6B2ADCFE6D17004E4F17"
+    }
+  ]
+}

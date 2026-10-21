@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-candidate-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metasequoia IME skin preview</title>
+  <style>
+    :root { --cand-text:#e9e8e8; --cand-num:#e9e8e89d; color-scheme:dark; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:32px; background:#171721; color:#e9e8e8; font:16px "Segoe UI","Microsoft YaHei",sans-serif; }
+    h1 { margin:0 0 24px; font-size:20px; }
+    .preview-grid { display:grid; gap:40px; align-items:start; }
+    .preview-label { margin-bottom:8px; color:#aaa; }
+    .containerParent { width:fit-content; padding-top:88px; position:relative; }
+    .containerParent:not(:empty)::before {
+      content:""; position:absolute; z-index:0; top:0; right:0; width:102px; height:88px;
+      background: url("./skins/niya-demo/assets/character.png") center / contain no-repeat; pointer-events:none;
+    }
+    .container { width:fit-content; min-width:176px; padding:2px; border:1.5px solid #9b9b9b2e; border-radius:12px; background:#202020; box-shadow:5px 5px 10px #0008; user-select:none; position:relative; z-index:1; overflow:hidden; }
+    .container::before {
+      content:""; position:absolute; inset:0; z-index:-1; opacity:.3;
+      background: url("./skins/niya-demo/assets/background.png") center / cover no-repeat; pointer-events:none;
+    }
+    .row { margin-top:2px; padding:0 12px 0 2px; }
+    .pinyin { display:flex; min-width:140px; }
+    .cursor { display:inline-block; width:1.5px; height:1.2em; margin-left:1px; background:#e08aa8; vertical-align:middle; }
+    .row-wrapper { position:relative; }
+    .vertical .row-wrapper { display:block; }
+    .horizontal .row-wrapper { display:inline-block; }
+    .cand { padding:1px 5px; border-radius:4px; }
+    .cand.first { background:rgba(224, 138, 168, 0.28); }
+    .num { margin-right:4px; color:var(--cand-num); font-size:.8em; }
+  </style>
+</head>
+<body>
+  <h1>Metasequoia IME 外部皮肤预览</h1>
+  <div class="preview-grid">
+    <section>
+      <div class="preview-label">横向候选框</div>
+      <div class="containerParent horizontal">
+        <div class="container">
+          <div class="row pinyin">ni'mf<span class="cursor"></span></div>
+          <div class="row-wrapper"><div class="row cand first"><span class="num">1</span>你们(rR)</div></div>
+          <div class="row-wrapper"><div class="row cand"><span class="num">2</span>你(rX)</div></div>
+          <div class="row-wrapper"><div class="row cand"><span class="num">3</span>尼(uV)</div></div>
+          <div class="row-wrapper"><div class="row cand"><span class="num">4</span>妮(nV)</div></div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <div class="preview-label">纵向候选框</div>
+      <div class="containerParent vertical">
+        <div class="container">
+          <div class="row pinyin">ni'mf<span class="cursor"></span></div>
+          <div class="row-wrapper"><div class="row cand first"><span class="num">1</span>你们(rR)</div></div>
+          <div class="row-wrapper"><div class="row cand"><span class="num">2</span>你(rX)</div></div>
+          <div class="row-wrapper"><div class="row cand"><span class="num">3</span>尼(uV)</div></div>
+          <div class="row-wrapper"><div class="row cand"><span class="num">4</span>妮(nV)</div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

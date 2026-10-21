@@ -1,0 +1,199 @@
+version: "{build}"
+skip_branch_with_pr: true
+skip_tags: true
+build: off
+
+os: Visual Studio 2019
+
+init:
+  - echo APPVEYOR_YAML_MARKER=pr-1222-smoke-packaging-v2
+  - echo APPVEYOR_REPO_BRANCH=%APPVEYOR_REPO_BRANCH%
+  - echo APPVEYOR_REPO_COMMIT=%APPVEYOR_REPO_COMMIT%
+  - echo APPVEYOR_PULL_REQUEST_NUMBER=%APPVEYOR_PULL_REQUEST_NUMBER%
+
+environment:
+  matrix:
+    # Build Node.js. The native addon is built with Bazel (there is no
+    # node-gyp source build anymore); use a VS2022 worker for the Bazel
+    # MSVC toolchain.
+    - nodejs_version: stable
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+
+    # Build plain C++
+    - nodejs_version: none
+
+    # Build Python package from source and smoke-test the installed wheel.
+    - nodejs_version: python
+
+platform:
+  - x64
+
+for:
+- matrix:
+    only:
+      - nodejs_version: stable
+  install:
+    - ps: Install-Product node $env:nodejs_version $env:platform
+    - npm -g i npm@latest
+    # @bazel/bazelisk provides both `bazel` and `bazelisk` commands on the
+    # npm global bin directory, which is already on PATH (unlike choco shims
+    # installed mid-build).
+    - appveyor-retry npm -g i @bazel/bazelisk
+    - bazel --version
+  build_script:
+    - appveyor-retry call npm install --omit=optional
+    # Only the addon itself is built with Bazel here. The Bazel dictionary
+    # genrules run rules_python py_binary tools whose venv bootstrap needs
+    # symlink support that AppVeyor workers lack, so dictionaries and configs
+    # come from the CMake install below (also used for the jieba plugin
+    # packaging), where data/scripts run on the system Python directly.
+    - echo [opencc npm package] building opencc win32-x64 addon with Bazel
+    - bazel build -c opt //node:opencc
+    - echo [opencc npm package] building dictionaries and jieba plugin with CMake
+    - cmake -A%platform% -S. -Bbuild-npm-jieba -DCMAKE_INSTALL_PREFIX:PATH=%CD%\build-npm-jieba-install -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS:BOOL=OFF -DBUILD_OPENCC_JIEBA_PLUGIN:BOOL=ON -DENABLE_GTEST:BOOL=OFF -DENABLE_BENCHMARK:BOOL=OFF
+    - cmake --build build-npm-jieba --config Release --target install
+    - ps: |
+        New-Item -ItemType Directory -Force prebuilds\assets | Out-Null
+        New-Item -ItemType Directory -Force prebuilds\win32-x64 | Out-Null
+        Copy-Item build-npm-jieba-install\share\opencc\*.ocd2 prebuilds\assets\
+        Get-ChildItem build-npm-jieba-install\share\opencc\*.json |
+          Where-Object { $_.Name -notlike '*jieba*' -and $_.Name -notlike '*.schema.json' } |
+          Copy-Item -Destination prebuilds\assets\
+        Copy-Item bazel-bin\node\opencc.node prebuilds\win32-x64\opencc.node
+  test_script:
+    - set PREBUILDS_ONLY=1&& npm test
+  after_test:
+    - chcp 65001
+    - echo [opencc npm package] verifying opencc win32-x64 prebuild layout
+    - if exist prebuilds\darwin-arm64 exit /B 1
+    - if exist prebuilds\linux-x64 exit /B 1
+    - if exist prebuilds\linux-arm64 exit /B 1
+    - if not exist prebuilds\win32-x64\opencc.node exit /B 1
+    - npm run prepare:scoped-packages
+    - echo [opencc npm package] packing opencc
+    - npm pack
+    - for %%F in (opencc-*.tgz) do set OPENCC_TGZ=%%~fF
+    - echo [opencc npm package] packing opencc win32-x64 scoped binary package
+    - npm pack dist\scoped-packages\@opencc\opencc-win32-x64
+    - for %%F in (opencc-opencc-win32-x64-*.tgz) do set OPENCC_WIN32_TGZ=%%~fF
+    - echo [opencc npm package] assembling opencc-jieba win32-x64 package files
+    - mkdir plugins\jieba\node\prebuilds\win32-x64
+    - mkdir plugins\jieba\node\data
+    - copy build-npm-jieba-install\share\opencc\*jieba.json plugins\jieba\node\data\
+    - xcopy /E /I /Y build-npm-jieba-install\share\opencc\jieba_dict plugins\jieba\node\data\jieba_dict
+    - copy build-npm-jieba-install\bin\plugins\opencc-jieba.dll plugins\jieba\node\prebuilds\win32-x64\opencc-jieba.dll
+    - npm --prefix plugins\jieba\node run prepare:scoped-packages
+    - echo [opencc npm package] packing opencc-jieba win32-x64 scoped binary package
+    - npm pack plugins\jieba\node\dist\scoped-packages\@opencc\opencc-jieba-win32-x64
+    - for %%F in (opencc-opencc-jieba-win32-x64-*.tgz) do set OPENCC_JIEBA_WIN32_TGZ=%%~fF
+    - echo [opencc npm package] packing opencc-jieba
+    - npm pack plugins\jieba\node --ignore-scripts
+    - for %%F in (opencc-jieba-*.tgz) do set OPENCC_JIEBA_TGZ=%%~fF
+    - mkdir npm-smoke
+    - echo [opencc npm smoke] installing packed packages
+    - npm --prefix npm-smoke install "%OPENCC_TGZ%" "%OPENCC_WIN32_TGZ%" "%OPENCC_JIEBA_TGZ%" "%OPENCC_JIEBA_WIN32_TGZ%"
+    - .\npm-smoke\node_modules\.bin\opencc.cmd --version
+    - .\npm-smoke\node_modules\.bin\opencc.cmd --help >nul
+    - mkdir npm-smoke\測試
+    - echo 勇敢的士兵 > npm-smoke\測試\輸入.txt
+    - echo [opencc npm smoke] input
+    - type npm-smoke\測試\輸入.txt
+    - .\npm-smoke\node_modules\.bin\opencc.cmd -i npm-smoke\測試\輸入.txt -o npm-smoke\測試\輸出.s2twp.txt -c s2twp
+    - echo [opencc npm smoke] s2twp file output
+    - type npm-smoke\測試\輸出.s2twp.txt
+    - .\npm-smoke\node_modules\.bin\opencc.cmd -i npm-smoke\測試\輸入.txt -o npm-smoke\測試\輸出.s2twp_jieba.txt -c s2twp_jieba
+    - echo [opencc npm smoke] s2twp_jieba file output
+    - type npm-smoke\測試\輸出.s2twp_jieba.txt
+    - type npm-smoke\測試\輸入.txt | .\npm-smoke\node_modules\.bin\opencc.cmd -c s2twp > npm-smoke\測試\管線.s2twp.txt
+    - echo [opencc npm smoke] s2twp pipe output
+    - type npm-smoke\測試\管線.s2twp.txt
+    - type npm-smoke\測試\輸入.txt | .\npm-smoke\node_modules\.bin\opencc.cmd -c s2twp_jieba > npm-smoke\測試\管線.s2twp_jieba.txt
+    - echo [opencc npm smoke] s2twp_jieba pipe output
+    - type npm-smoke\測試\管線.s2twp_jieba.txt
+  artifacts:
+  - path: opencc-*.tgz
+    name: OpenCCNpmPackage
+  - path: opencc-opencc-win32-x64-*.tgz
+    name: OpenCCWin32NpmPackage
+  - path: opencc-jieba-*.tgz
+    name: OpenCCJiebaNpmPackage
+  - path: opencc-opencc-jieba-win32-x64-*.tgz
+    name: OpenCCJiebaWin32NpmPackage
+
+- matrix:
+    only:
+      - nodejs_version: none
+  build_script:
+    - ps: .\scripts\release-windows-winget.ps1 -SkipTests
+  test_script:
+    - chcp 65001
+    - dist\winget-x64\staging\bin\opencc.exe --version
+    - dist\winget-x64\staging\bin\opencc.exe --help >nul
+    - mkdir 測試
+    - echo 勇敢的士兵 > 測試\輸入.txt
+    - echo [opencc smoke] input
+    - type 測試\輸入.txt
+    - dist\winget-x64\staging\bin\opencc.exe -i 測試\輸入.txt -o 測試\輸出.s2twp.txt -c s2twp
+    - echo [opencc smoke] s2twp file output
+    - type 測試\輸出.s2twp.txt
+    - dist\winget-x64\staging\bin\opencc.exe -i 測試\輸入.txt -o 測試\輸出.s2twp_jieba.txt -c s2twp_jieba
+    - echo [opencc smoke] s2twp_jieba file output
+    - type 測試\輸出.s2twp_jieba.txt
+    - type 測試\輸入.txt | dist\winget-x64\staging\bin\opencc.exe -c s2twp > 測試\管線.s2twp.txt
+    - echo [opencc smoke] s2twp pipe output
+    - type 測試\管線.s2twp.txt
+    - type 測試\輸入.txt | dist\winget-x64\staging\bin\opencc.exe -c s2twp_jieba > 測試\管線.s2twp_jieba.txt
+    - echo [opencc smoke] s2twp_jieba pipe output
+    - type 測試\管線.s2twp_jieba.txt
+    - 7z a opencc-smoke-output.zip 測試\*.txt
+  artifacts:
+  - path: dist\winget-x64\OpenCC-*-windows-x64-portable.zip
+    name: OpenCCWindowsCLI
+  - path: dist\winget-x64\OpenCC-*-windows-x64-portable.zip.sha256
+    name: OpenCCWindowsCLISha256
+  - path: dist\winget-x64\winget-manifests\**
+    name: OpenCCWinGetManifests
+  - path: opencc-smoke-output.zip
+    name: OpenCCSmokeOutput
+
+- matrix:
+    only:
+      - nodejs_version: python
+  install:
+    - py -3 --version
+    - py -3 -m pip install --upgrade pip setuptools wheel
+  build_script:
+    - py -3 -m pip wheel --no-deps --wheel-dir python-smoke-dist .
+    - for %%F in (python-smoke-dist\*.whl) do set OPENCC_PY_WHL=%%~fF
+    - py -3 -m venv python-smoke-venv
+    - python-smoke-venv\Scripts\python.exe -m pip install "%OPENCC_PY_WHL%"
+  test_script:
+    - chcp 65001
+    - python-smoke-venv\Scripts\opencc.exe --version
+    - python-smoke-venv\Scripts\opencc.exe --help >nul
+    - mkdir python-smoke\測試
+    - echo 打印机和鼠标 > python-smoke\測試\簡體輸入.txt
+    - echo 開放中文轉換 > python-smoke\測試\繁體輸入.txt
+    - echo [opencc python smoke] s2twp input
+    - type python-smoke\測試\簡體輸入.txt
+    - python-smoke-venv\Scripts\opencc.exe -i python-smoke\測試\簡體輸入.txt -o python-smoke\測試\輸出.s2twp.txt -c s2twp
+    - echo [opencc python smoke] s2twp file output
+    - type python-smoke\測試\輸出.s2twp.txt
+    - type python-smoke\測試\簡體輸入.txt | python-smoke-venv\Scripts\opencc.exe -c s2twp > python-smoke\測試\管線.s2twp.txt
+    - echo [opencc python smoke] s2twp pipe output
+    - type python-smoke\測試\管線.s2twp.txt
+    - echo [opencc python smoke] t2s input
+    - type python-smoke\測試\繁體輸入.txt
+    - python-smoke-venv\Scripts\opencc.exe -i python-smoke\測試\繁體輸入.txt -o python-smoke\測試\輸出.t2s.txt -c t2s
+    - echo [opencc python smoke] t2s file output
+    - type python-smoke\測試\輸出.t2s.txt
+    - type python-smoke\測試\繁體輸入.txt | python-smoke-venv\Scripts\opencc.exe -c t2s > python-smoke\測試\管線.t2s.txt
+    - echo [opencc python smoke] t2s pipe output
+    - type python-smoke\測試\管線.t2s.txt
+    - python-smoke-venv\Scripts\python.exe python\tests\pypi_smoke.py
+    - 7z a opencc-python-smoke-output.zip python-smoke\測試\*.txt
+  artifacts:
+  - path: python-smoke-dist\*.whl
+    name: OpenCCPythonWheel
+  - path: opencc-python-smoke-output.zip
+    name: OpenCCPythonSmokeOutput

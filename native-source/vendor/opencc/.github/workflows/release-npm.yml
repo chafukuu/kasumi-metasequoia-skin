@@ -1,0 +1,297 @@
+name: Publish npm packages
+run-name: Publish npm packages${{ inputs.dry_run && ' (dry-run)' || '' }}
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: Version to write to package.json before publishing, for example 1.3.2-beta.0 or 1.3.2-next.1
+        required: false
+        type: string
+      dry_run:
+        description: Run npm publish with --dry-run
+        required: true
+        type: boolean
+        default: true
+      upload_npm_debug_logs:
+        description: Upload sanitized npm debug logs when a job fails; logs may still contain sensitive data
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  publish-jieba:
+    name: Publish opencc-jieba
+    needs: publish-opencc
+    runs-on: macos-15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install dependencies
+        run: npm ci --omit=optional
+
+      - name: Prepare package versions
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node - "$PACKAGE_VERSION" "$RELEASE_TAG" <<'NODE'
+          const fs = require('fs');
+          const requestedVersion = (process.argv[2] || process.argv[3] || '')
+            .replace(/^ver\./, '')
+            .replace(/^v(?=\d)/, '');
+          const file = 'plugins/jieba/node/package.json';
+          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const version = requestedVersion || pkg.version;
+          pkg.version = version;
+          if (pkg.peerDependencies && pkg.peerDependencies.opencc) {
+            pkg.peerDependencies.opencc = `>=${version}`;
+          }
+          fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+
+      - name: Check published package version
+        id: publish_check
+        shell: bash
+        run: |
+          package="opencc-jieba"
+          version="$(node -p "require('./plugins/jieba/node/package.json').version")"
+          published="$(npm view "$package@$version" version 2>/dev/null || true)"
+          if [ "$published" = "$version" ]; then
+            echo "$package@$version is already published; skipping build and publish."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build opencc-jieba data
+        if: steps.publish_check.outputs.published != 'true'
+        shell: bash
+        run: |
+          cd plugins/jieba/node
+          npm run build -- darwin-arm64
+
+      - name: Pack opencc-jieba
+        if: steps.publish_check.outputs.published != 'true'
+        shell: bash
+        run: |
+          cd plugins/jieba/node
+          mkdir -p dist/npm-artifacts
+          npm pack --pack-destination dist/npm-artifacts
+
+      - name: Upload package artifact
+        if: steps.publish_check.outputs.published != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-opencc-jieba
+          path: plugins/jieba/node/dist/npm-artifacts/*.tgz
+          if-no-files-found: error
+
+      - name: Determine npm dist-tag
+        id: npm_metadata
+        shell: bash
+        run: |
+          version="$(node -p "require('./plugins/jieba/node/package.json').version")"
+          tag="$(node -e "const version = process.argv[1]; const match = version.match(/-([0-9A-Za-z-]+)(?:[.+]|$)/); console.log(match ? match[1] : 'latest');" "$version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Publishing opencc-jieba@$version with npm dist-tag '$tag'"
+
+      - name: Publish opencc-jieba
+        if: steps.publish_check.outputs.published != 'true'
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          NPM_TAG: ${{ steps.npm_metadata.outputs.tag }}
+          OPENCC_NPM_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          package="opencc-jieba"
+          version="${{ steps.npm_metadata.outputs.version }}"
+          if [ "$(npm view "$package@$version" version 2>/dev/null || true)" = "$version" ]; then
+            echo "$package@$version is already published; skipping."
+            exit 0
+          fi
+          publish_args=(--provenance --loglevel verbose)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
+            publish_args+=(--dry-run)
+          fi
+          cd plugins/jieba/node
+          npm publish --tag "$NPM_TAG" "${publish_args[@]}"
+
+      - name: Collect npm debug logs
+        if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.upload_npm_debug_logs }}
+        shell: bash
+        run: |
+          cache_dir="$(npm config get cache)"
+          mkdir -p npm-debug-logs
+          if [ -d "$cache_dir/_logs" ]; then
+            for log in "$cache_dir/_logs"/*-debug-*.log; do
+              [ -f "$log" ] || continue
+              sed -E \
+                -e 's#(//[^[:space:]]+:_authToken=).+#\1[REDACTED]#g' \
+                -e 's/(Authorization: Bearer )[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/g' \
+                -e 's/(npm_[A-Za-z0-9]{20,})/[REDACTED]/g' \
+                "$log" > "npm-debug-logs/$(basename "$log")"
+            done
+          fi
+
+      - name: Upload npm debug logs
+        if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.upload_npm_debug_logs }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-debug-logs-opencc-jieba
+          path: npm-debug-logs/*.log
+          if-no-files-found: warn
+
+  publish-opencc:
+    name: Publish opencc
+    runs-on: macos-15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+
+      - name: Install dependencies
+        run: npm ci --omit=optional --ignore-scripts
+
+      - name: Prepare package versions
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node - "$PACKAGE_VERSION" "$RELEASE_TAG" <<'NODE'
+          const fs = require('fs');
+          const requestedVersion = (process.argv[2] || process.argv[3] || '')
+            .replace(/^ver\./, '')
+            .replace(/^v(?=\d)/, '');
+          const file = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const version = requestedVersion || pkg.version;
+          pkg.version = version;
+          fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+
+      - name: Check published package version
+        id: publish_check
+        shell: bash
+        run: |
+          package="opencc"
+          version="$(node -p "require('./package.json').version")"
+          published="$(npm view "$package@$version" version 2>/dev/null || true)"
+          if [ "$published" = "$version" ]; then
+            echo "$package@$version is already published; skipping build and publish."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build opencc package assets
+        if: steps.publish_check.outputs.published != 'true'
+        run: ./scripts/build-node-prebuild-bazel.sh darwin-arm64
+
+      - name: Test
+        if: steps.publish_check.outputs.published != 'true'
+        env:
+          PREBUILDS_ONLY: 1
+        run: npm test
+
+      - name: Pack opencc
+        if: steps.publish_check.outputs.published != 'true'
+        run: |
+          mkdir -p dist/npm-artifacts
+          npm pack --pack-destination dist/npm-artifacts
+
+      - name: Upload package artifact
+        if: steps.publish_check.outputs.published != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-opencc
+          path: dist/npm-artifacts/*.tgz
+          if-no-files-found: error
+
+      - name: Determine npm dist-tag
+        id: npm_metadata
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="$(node -e "const version = process.argv[1]; const match = version.match(/-([0-9A-Za-z-]+)(?:[.+]|$)/); console.log(match ? match[1] : 'latest');" "$version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Publishing opencc@$version with npm dist-tag '$tag'"
+
+      - name: Publish opencc
+        if: steps.publish_check.outputs.published != 'true'
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          NPM_TAG: ${{ steps.npm_metadata.outputs.tag }}
+          OPENCC_NPM_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          package="opencc"
+          version="${{ steps.npm_metadata.outputs.version }}"
+          if [ "$(npm view "$package@$version" version 2>/dev/null || true)" = "$version" ]; then
+            echo "$package@$version is already published; skipping."
+            exit 0
+          fi
+          publish_args=(--provenance --loglevel verbose)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
+            publish_args+=(--dry-run)
+          fi
+          npm publish --tag "$NPM_TAG" "${publish_args[@]}"
+
+      - name: Collect npm debug logs
+        if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.upload_npm_debug_logs }}
+        shell: bash
+        run: |
+          cache_dir="$(npm config get cache)"
+          mkdir -p npm-debug-logs
+          if [ -d "$cache_dir/_logs" ]; then
+            for log in "$cache_dir/_logs"/*-debug-*.log; do
+              [ -f "$log" ] || continue
+              sed -E \
+                -e 's#(//[^[:space:]]+:_authToken=).+#\1[REDACTED]#g' \
+                -e 's/(Authorization: Bearer )[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/g' \
+                -e 's/(npm_[A-Za-z0-9]{20,})/[REDACTED]/g' \
+                "$log" > "npm-debug-logs/$(basename "$log")"
+            done
+          fi
+
+      - name: Upload npm debug logs
+        if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.upload_npm_debug_logs }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-debug-logs-opencc
+          path: npm-debug-logs/*.log
+          if-no-files-found: warn

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "selectedSkin": "kasumi-adaptive",
+  "image": "assets/source-longest.png",
+  "widthDip": 1032,
+  "heightDip": 344,
+  "offsetXDip": 0,
+  "offsetYDip": -219.75,
+  "cutOffsetXDip": 0,
+  "atlas": {
+    "sourceWidthPx": 2172,
+    "sourceHeightPx": 724,
+    "leftFixedEndPx": 405,
+    "emblemStartPx": 605,
+    "emblemEndPx": 715,
+    "rightFixedStartPx": 1560,
+    "cardRightPx": 2172,
+    "excludeRuns": "assets/source-exclusions.json",
+    "restoreWhiteRuns": "assets/source-white-restore.json",
+    "mode": "occlusion",
+    "occlusionCutPx": 1850,
+    "foregroundKeepRuns": "assets/source-foreground.json",
+    "foregroundScale": 0.9,
+    "foregroundAnchorYPx": 420,
+    "foregroundOffsetYDip": -10,
+    "backgroundRepairSourceXPx": 1000,
+    "backgroundRepairTargetXPx": 1586,
+    "backgroundRepairTopPx": 425,
+    "backgroundRepairBottomPx": 635,
+    "backgroundRemovalMarginPx": 2,
+    "portraitKeepRuns": "assets/source-portrait.json"
+  }
+}

@@ -1,0 +1,31 @@
+CompileFlags:
+  Add: [
+      -DUNICODE,
+      -D_UNICODE,
+      # -DFANY_DEBUG,
+      "-std=c++17",
+      "-I@SERVER_ROOT@",
+      "-I@SERVER_SRC@",
+      "-I@VCPKG_INCLUDE@",
+      # engine includes
+      "-I@ENGINE_ROOT@",
+      # utfcpp includes
+      "-I@UTFCPP@",
+      "-I@VOICE_INCLUDE@",
+      "-I@MINIAUDIO@",
+      "-I@GUI_INCLUDE@",
+      # Windows Implementation Library includes
+      "-I@WIL@",
+      # Boost includes
+      "-I@BOOST@",
+      -Wno-microsoft-goto,
+      -Wno-nonportable-include-path,
+      -Wno-microsoft-extra-qualification,
+      "-fms-extensions",
+      "-fms-compatibility",
+      "-fms-compatibility-version=19",
+      # -Wno-unused-value,
+    ] # ignore some specific warnings
+  CompilationDatabase: build/ # Search build/ directory for compile_commands.json
+# Diagnostics:
+#   UnusedIncludes: None # ignore unused includes

@@ -1,0 +1,951 @@
+[
+  {
+    "name": "legacy settings",
+    "message": {
+      "type": "configRequest"
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "versioned settings",
+    "message": {
+      "type": "configRequest",
+      "protocolVersion": 1
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "unknown version",
+    "message": {
+      "type": "configRequest",
+      "protocolVersion": 2
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "string version",
+    "message": {
+      "type": "configRequest",
+      "protocolVersion": "1"
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "unknown message",
+    "message": {
+      "type": "snapLayout"
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "extra envelope field",
+    "message": {
+      "type": "configRequest",
+      "surprise": true
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "wrong surface",
+    "message": {
+      "type": "configRequest"
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "candidate 1",
+    "message": {
+      "type": "candidate",
+      "data": 1
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "candidate 9",
+    "message": {
+      "type": "candidate",
+      "data": 9
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate 0",
+    "message": {
+      "type": "candidate",
+      "data": 0
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "candidate 10 by mouse",
+    "message": {
+      "type": "candidate",
+      "data": 10
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate 1.2",
+    "message": {
+      "type": "candidate",
+      "data": 1.2
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate 1",
+    "message": {
+      "type": "candidate",
+      "data": "1"
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate None",
+    "message": {
+      "type": "candidate",
+      "data": null
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "candidate wheel one notch down",
+    "message": {
+      "type": "candidateWheel",
+      "data": -120
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "candidate wheel high precision remainder",
+    "message": {
+      "type": "candidateWheel",
+      "data": 24
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate wheel fractional",
+    "message": {
+      "type": "candidateWheel",
+      "data": 1.5
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "candidate page arrow next",
+    "message": {
+      "type": "candidatePage",
+      "data": "next"
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate page arrow direction",
+    "message": {
+      "type": "candidatePage",
+      "data": "up"
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "invalid candidate wheel from settings",
+    "message": {
+      "type": "candidateWheel",
+      "data": -120
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "resize corner",
+    "message": {
+      "type": "resizeStart",
+      "data": "left-top"
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "unknown corner",
+    "message": {
+      "type": "resizeStart",
+      "data": "topLeft"
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "config scalar",
+    "message": {
+      "type": "configUpdate",
+      "data": {
+        "path": "input.mode",
+        "value": "cn"
+      }
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "config missing value",
+    "message": {
+      "type": "configUpdate",
+      "data": {
+        "path": "input.mode"
+      }
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "config wrong shape",
+    "message": {
+      "type": "configUpdate",
+      "data": []
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "dictionary import",
+    "message": {
+      "type": "dictionaryRequest",
+      "data": {
+        "requestId": "dict-1",
+        "dictionary": "quanpin",
+        "action": "import",
+        "content": "ni'hao\t你好\t10"
+      }
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "dictionary request unknown action",
+    "message": {
+      "type": "dictionaryRequest",
+      "data": {
+        "requestId": "1",
+        "dictionary": "quanpin",
+        "action": "eval"
+      }
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "negative context size",
+    "message": {
+      "type": "contextMenuResize",
+      "data": {
+        "width": -1,
+        "height": 100
+      }
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "context overflow",
+    "message": {
+      "type": "contextMenuResize",
+      "data": {
+        "width": 65536,
+        "height": 100
+      }
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "truncation diagnostics",
+    "message": {
+      "type": "contentTruncated",
+      "data": {
+        "surface": "cand",
+        "width": 100,
+        "height": 40,
+        "viewportWidth": 80
+      }
+    },
+    "valid": true,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "window state",
+    "message": {
+      "type": "windowState",
+      "protocolVersion": 1,
+      "data": {
+        "isMaximized": true
+      }
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "server"
+  },
+  {
+    "name": "wrong window state",
+    "message": {
+      "type": "windowState",
+      "data": {
+        "isMaximized": "true"
+      }
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "server"
+  },
+  {
+    "name": "dictionary response",
+    "message": {
+      "type": "dictionaryResponse",
+      "requestId": "dict-1",
+      "ok": true,
+      "message": "成功",
+      "rows": [
+        {
+          "word": "你好",
+          "code": "ni'hao",
+          "weight": 10
+        }
+      ]
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "server"
+  },
+  {
+    "name": "malformed dictionary row",
+    "message": {
+      "type": "dictionaryResponse",
+      "requestId": "dict-1",
+      "ok": true,
+      "message": "成功",
+      "rows": [
+        {
+          "weight": 10
+        }
+      ]
+    },
+    "valid": false,
+    "surface": "settings",
+    "direction": "server"
+  },
+  {
+    "name": "malformed root",
+    "message": [],
+    "valid": false,
+    "surface": "settings",
+    "direction": "client"
+  },
+  {
+    "name": "candidate 11 rejected",
+    "message": {
+      "type": "candidate",
+      "data": 11
+    },
+    "valid": false,
+    "surface": "candidate",
+    "direction": "client"
+  },
+  {
+    "name": "paged query",
+    "message": {
+      "type": "dictionaryRequest",
+      "data": {
+        "requestId": "dict-page",
+        "dictionary": "english",
+        "action": "query",
+        "word": "a",
+        "offset": 200,
+        "limit": 200
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "negative offset",
+    "message": {
+      "type": "dictionaryRequest",
+      "data": {
+        "requestId": "dict-page",
+        "dictionary": "english",
+        "action": "query",
+        "word": "a",
+        "offset": -1,
+        "limit": 200
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "unbounded page",
+    "message": {
+      "type": "dictionaryRequest",
+      "data": {
+        "requestId": "dict-page",
+        "dictionary": "english",
+        "action": "query",
+        "word": "a",
+        "offset": 200,
+        "limit": 201
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "empty page",
+    "message": {
+      "type": "dictionaryRequest",
+      "data": {
+        "requestId": "dict-page",
+        "dictionary": "english",
+        "action": "query",
+        "word": "a",
+        "offset": 200,
+        "limit": 0
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats overview request",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-1",
+        "action": "overview"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "stats clear all request",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-2",
+        "action": "clearAll"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "stats request legacy clear with retention",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-legacy",
+        "action": "clear",
+        "retention": "forever"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats request legacy clear action",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-legacy-action",
+        "action": "clear"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats request legacy retention field",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-legacy-retention",
+        "action": "clearAll",
+        "retention": "30d"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats request unknown action",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-3",
+        "action": "delete"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats request missing request id",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "action": "overview"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats request extra field",
+    "message": {
+      "type": "statsRequest",
+      "data": {
+        "requestId": "stats-4",
+        "action": "openDirectory",
+        "path": "C:/tmp"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats response with overview",
+    "message": {
+      "type": "statsResponse",
+      "requestId": "stats-1",
+      "action": "overview",
+      "ok": true,
+      "message": "已加载统计数据",
+      "overview": {
+        "hasData": true,
+        "firstDayKey": 20260919,
+        "lastDayKey": 20260920,
+        "days": 2,
+        "totalChars": 120,
+        "totalActiveMs": 90000,
+        "todayDayKey": 20260920,
+        "todayChars": 20,
+        "todayActiveMs": 30000,
+        "averagePerDay": 60.0,
+        "currentStreak": 2,
+        "longestStreak": 2,
+        "bestDayKey": 20260919,
+        "bestDayChars": 100,
+        "todaySpeed": 40.0,
+        "averageSpeed": 80.0,
+        "fastestSpeed": 100.0,
+        "fastestDayKey": 20260919,
+        "todayFirstWordRatio": 0.75,
+        "totalFirstWordRatio": 0.5,
+        "todayFirstWordTotal": 40,
+        "categories": {
+          "cjk": 80,
+          "latin": 20,
+          "digit": 10,
+          "punct": 10,
+          "other": 0
+        },
+        "todayHourly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 5, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "daily": [
+          {
+            "dayKey": 20260919,
+            "cjk": 70,
+            "latin": 20,
+            "digit": 5,
+            "punct": 5,
+            "other": 0,
+            "activeMs": 60000,
+            "firstWordHits": 10,
+            "firstWordTotal": 20
+          },
+          {
+            "dayKey": 20260920,
+            "cjk": 10,
+            "latin": 0,
+            "digit": 5,
+            "punct": 5,
+            "other": 0,
+            "activeMs": 30000,
+            "firstWordHits": 30,
+            "firstWordTotal": 40
+          }
+        ]
+      }
+    },
+    "direction": "server",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "stats response malformed overview",
+    "message": {
+      "type": "statsResponse",
+      "requestId": "stats-1",
+      "action": "overview",
+      "ok": true,
+      "message": "已加载统计数据",
+      "overview": {
+        "hasData": true,
+        "firstDayKey": 20260919,
+        "lastDayKey": 20260920,
+        "days": 2,
+        "totalChars": 120,
+        "totalActiveMs": 90000,
+        "todayDayKey": 20260920,
+        "todayChars": 20,
+        "todayActiveMs": 30000,
+        "averagePerDay": 60.0,
+        "currentStreak": 2,
+        "longestStreak": 2,
+        "bestDayKey": 20260919,
+        "bestDayChars": 100,
+        "todaySpeed": 40.0,
+        "averageSpeed": 80.0,
+        "fastestSpeed": 100.0,
+        "fastestDayKey": 20260919,
+        "categories": {
+          "cjk": 80,
+          "latin": 20,
+          "digit": 10,
+          "punct": 10,
+          "other": 0
+        },
+        "todayHourly": [],
+        "daily": [
+          {
+            "dayKey": 20260919,
+            "latin": 20,
+            "digit": 5,
+            "punct": 5,
+            "other": 0,
+            "activeMs": 60000
+          }
+        ]
+      }
+    },
+    "direction": "server",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "stats response clear all",
+    "message": {
+      "type": "statsResponse",
+      "requestId": "stats-2",
+      "action": "clearAll",
+      "ok": true,
+      "message": "已清空 12 天数据",
+      "removedDays": 12,
+      "overview": {
+        "hasData": false,
+        "firstDayKey": 0,
+        "lastDayKey": 0,
+        "days": 0,
+        "totalChars": 0,
+        "totalActiveMs": 0,
+        "todayDayKey": 20260920,
+        "todayChars": 0,
+        "todayActiveMs": 0,
+        "averagePerDay": 0.0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "bestDayKey": 0,
+        "bestDayChars": 0,
+        "todaySpeed": 0.0,
+        "averageSpeed": 0.0,
+        "fastestSpeed": 0.0,
+        "fastestDayKey": 0,
+        "todayFirstWordRatio": null,
+        "totalFirstWordRatio": null,
+        "todayFirstWordTotal": 0,
+        "categories": {
+          "cjk": 0,
+          "latin": 0,
+          "digit": 0,
+          "punct": 0,
+          "other": 0
+        },
+        "todayHourly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "daily": []
+      }
+    },
+    "direction": "server",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "stats response error",
+    "message": {
+      "type": "statsResponse",
+      "requestId": "stats-3",
+      "action": "clearAll",
+      "ok": false,
+      "message": "清空统计数据失败：database is locked"
+    },
+    "direction": "server",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "collocation model download with model id",
+    "message": {
+      "type": "collocationModelDownload",
+      "data": {
+        "modelId": "zh-moqi"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "collocation model download without model id",
+    "message": {
+      "type": "collocationModelDownload"
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "collocation model delete with model id",
+    "message": {
+      "type": "collocationModelDelete",
+      "data": {
+        "modelId": "zh-moqi"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "collocation model delete rejects unknown fields",
+    "message": {
+      "type": "collocationModelDelete",
+      "data": {
+        "modelId": "zh-moqi",
+        "force": true
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "neural model download",
+    "message": {
+      "type": "neuralModelDownload"
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "neural model delete takes no model id",
+    "message": {
+      "type": "neuralModelDelete",
+      "data": {
+        "modelId": "neural-desktop"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "default ime set request",
+    "message": {
+      "type": "defaultImeRequest",
+      "protocolVersion": 1,
+      "data": {
+        "requestId": "default-ime-1",
+        "action": "setDefault"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "default ime request rejects unknown action",
+    "message": {
+      "type": "defaultImeRequest",
+      "data": {
+        "requestId": "default-ime-1",
+        "action": "unregister"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "default ime request rejected from toolbar",
+    "message": {
+      "type": "defaultImeRequest",
+      "data": {
+        "requestId": "default-ime-1",
+        "action": "status"
+      }
+    },
+    "direction": "client",
+    "surface": "toolbar",
+    "valid": false
+  },
+  {
+    "name": "default ime status response",
+    "message": {
+      "type": "defaultImeResponse",
+      "protocolVersion": 1,
+      "requestId": "default-ime-1",
+      "action": "status",
+      "ok": true,
+      "message": "",
+      "enabled": true,
+      "isDefault": false
+    },
+    "direction": "server",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "game compat status request",
+    "message": {
+      "type": "gameCompatRequest",
+      "protocolVersion": 1,
+      "data": {
+        "requestId": "game-compat-1",
+        "action": "status"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "game compat apply request",
+    "message": {
+      "type": "gameCompatRequest",
+      "protocolVersion": 1,
+      "data": {
+        "requestId": "game-compat-2",
+        "action": "apply",
+        "enabled": true,
+        "name": "拼音输入法"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": true
+  },
+  {
+    "name": "game compat request rejects unknown action",
+    "message": {
+      "type": "gameCompatRequest",
+      "data": {
+        "requestId": "game-compat-1",
+        "action": "register"
+      }
+    },
+    "direction": "client",
+    "surface": "settings",
+    "valid": false
+  },
+  {
+    "name": "game compat request rejected from toolbar",
+    "message": {
+      "type": "gameCompatRequest",
+      "data": {
+        "requestId": "game-compat-1",
+        "action": "status"
+      }
+    },
+    "direction": "client",
+    "surface": "toolbar",
+    "valid": false
+  },
+  {
+    "name": "game compat status response",
+    "message": {
+      "type": "gameCompatResponse",
+      "protocolVersion": 1,
+      "requestId": "game-compat-1",
+      "action": "status",
+      "ok": true,
+      "message": "",
+      "enabled": true,
+      "name": "拼音输入法",
+      "registeredName": "拼音输入法",
+      "defaultName": "拼音输入法"
+    },
+    "direction": "server",
+    "surface": "settings",
+    "valid": true
+  }
+]

@@ -1,0 +1,2194 @@
+diff --git a/examples/skin-examples/schema/README.md b/examples/skin-examples/schema/README.md
+index 125ee52..9e0628b 100644
+--- a/examples/skin-examples/schema/README.md
++++ b/examples/skin-examples/schema/README.md
+@@ -17,6 +17,8 @@
+ ## `[candidate_window]`
+ 
+ - `min_width_dip`：卡片最小宽度；实际最小宽度还会被装饰图的 `width_dip` 撑大
++- `max_width_dip`：可选，仅限制横排卡片的最大宽度，`1`–`4096` 的有限数值（DIP），例如 `1032.0`；包含内容内边距，不包含阴影和 `outer_insets_dip`。不写时保持原有布局，竖排忽略。`min_width_dip` 大于此值时清单加载失败；可用屏幕空间更小时以屏幕为限。达到上限后默认按原生布局换行；设定下述 `single_line = true` 可以让候选保持一行
++- `reserve_max_width`：可选布尔值，默认 `false`；设为 `true` 时必须同时设置 `max_width_dip`，否则清单加载失败。仅横排生效：水平定位只按不透明卡片的 `max_width_dip` 预留宽度，不加 frame、阴影或 `outer_insets_dip`，透明外缘允许超出屏幕。此虚拟宽度只参与水平定位，实际卡片和宿主窗口的宽高、垂直位置仍由原生布局决定，卡片宽度继续随内容变化。竖排忽略；旧皮肤不写时保持原有定位
+ - `corner_radius_dip`：卡片圆角，`0`–`32`；不写则沿用 `base`
+ - `border_width_dip`：卡片外框线宽，`0`–`4`；颜色取 `border`，不写 `border` 时取 `base` 的边框色（杨柳青、秋桂没有外框，此时仍不可见）
+ - `item_corner_radius_dip`：选中 / 悬停高亮的圆角，`0`–`16`；贴着卡片四角的那几个角仍跟 `corner_radius_dip`
+@@ -26,6 +28,50 @@
+ - `page_arrows`：候选框里的翻页箭头，`true` | `false`。横排时是候选右侧贴着最后一行的一小列，竖排时是最后一行下方的一矮行、“‹”与序号左对齐；颜色取 `number`，悬停底色取 `hover`。不写则沿用 `base` 的默认皮肤设置（数据目录 `skins\default\<base>\skin.toml`，出厂为 `false`）
+ - `fit_content`：卡片是否严格按候选文字所需的宽度收紧，`true` | `false`。打开后不再垫出厂的最小宽度（160 DIP），同一次输入里后到的翻译等内容消失时宽度也立刻缩回；`min_width_dip` 和装饰图 `width_dip` 仍然生效。不写则沿用 `base` 的默认皮肤设置（出厂为 `false`）
+ 
++### `[candidate_window.horizontal]` 的 `single_line`（可选）
++
++布尔值，默认 `false`。设为 `true` 时横排候选保持单行；可用宽度不足时按每项的真实文字宽度分配空间，过长文字以省略号显示，保留原始候选内容、序号与数字选词操作。竖排忽略。适合只能容纳一行的固定贴图候选条。
++
++### `[candidate_window.item_separators]`（可选）
++
++按横排首行的实际候选布局绘制内部词间双细线；只有一个词时不画，也不在首尾画。与文字使用同一次原生绘制，不依赖诊断日志或外部浮层。没有此表时不画；竖排忽略。表中五个字段都必须给出：
++
++- `color`：使用下文的颜色格式，对深浅主题均生效
++- `top_dip` / `bottom_dip`：相对卡片顶边的线段起止位置，`0`–`4096` 的有限 DIP 数值，`bottom_dip` 必须大于 `top_dip`；线段被限制在卡片高度之内
++- `line_width_dip`：每条线的宽度，`0`–`4096` 的有限 DIP 数值，不含 `0`
++- `line_gap_dip`：双线的中心距，`0`–`4096` 的有限 DIP 数值，不得小于线宽
++
++```toml
++[candidate_window.item_separators]
++color = "#ffad00"
++top_dip = 6.75
++bottom_dip = 38.25
++line_width_dip = 0.4875
++line_gap_dip = 1.05
++```
++
++### `[candidate_window.band_artwork]`（可选）
++
++固定尺寸的横排双层飘带。背景、前景、候选文字及词间分隔线都在同一个候选窗口内绘制、提交和显示隐藏，避免外部装饰窗口与文字的出现时机不同。没有此表时保持原行为；竖排忽略。
++
++- `background` / `foreground`：必填，皮肤内已存在的相对 `.png` 路径。两图使用完整源图，分别映射到下面的固定绘制尺寸，不随候选条伸缩而横向拉伸
++- `width_dip` / `height_dip`：必填，完整图层绘制宽高，`0`–`4096` 的有限 DIP 数值，不含 `0`。应按源图比例声明
++- `offset_y_dip`：必填，相对卡片顶边的纵向偏移，`-4096`–`4096` 的有限 DIP 数值
++- `foreground_right_clip_dip`：必填，背景右端与卡片右边之间的裁去宽度，`0`–`width_dip` 的有限 DIP 数值；背景保持左侧位置，裁切边随卡片右边变化
++- `offset_x_dip`：可省略，给出时只能是数值 `0`。背景左侧与卡片左侧对齐；前景右侧与卡片右侧对齐，整图平移
++
++两层都位于卡片正文与文字之下；此表不改变测量、卡片内边距、命中测试或外部留白。图片需要伸出卡片时仍应通过 `outer_insets_dip` 为实际非透明区域预留窗口空间。
++
++```toml
++[candidate_window.band_artwork]
++background = "assets/band-background.png"
++foreground = "assets/band-foreground.png"
++width_dip = 1032.0
++height_dip = 344.0
++offset_y_dip = -219.75
++foreground_right_clip_dip = 137.695027624309
++```
++
+ ### `[candidate_window.decoration]`（可选）
+ 
+ 卡片上方的装饰图。写了这张表就必须同时给出 `image`、`top_inset_dip`、`width_dip`。
+@@ -47,7 +93,7 @@
+ 全贴图皮肤的地基：面板透明、没有描边、直角、默认没有阴影，候选框长什么样完全由下面的九宫格面板图和挂件决定。它只能作为 `base`，不能在设置页单独选用。
+ 
+ - 文字与高亮用不依赖底色的中性色：深色主题近白文字（`#f2f2f2`）、白色半透明的选中 / 悬停底，浅色主题近黑文字（`#1a1a1a`）、黑色半透明的选中 / 悬停底；高亮圆角 4，可用 `item_corner_radius_dip` 改。贴图偏深或偏浅时用 `[candidate.dark]` / `[candidate.light]` 改配色。
+-- v1 的键照样可用：配色、`font_family`、`page_arrows`、`fit_content`、`min_width_dip`、`corner_radius_dip`、`border_width_dip`、`shadow`（写 `soft` / `strong` 才有阴影）、`[candidate_window.decoration]`、`[candidate_window.background]`、`[toolbar]`。写了 `border_image` 时，卡片的底色、描边、圆角、阴影和 `background` 背景图都让给面板图。
++- v1 的键照样可用：配色、`font_family`、`page_arrows`、`fit_content`、`min_width_dip`、`max_width_dip`、`reserve_max_width`、`corner_radius_dip`、`border_width_dip`、`shadow`（写 `soft` / `strong` 才有阴影）、`[candidate_window.decoration]`、`[candidate_window.background]`、`[toolbar]`。写了 `border_image` 时，卡片的底色、描边、圆角、阴影和 `background` 背景图都让给面板图。
+ - 右键菜单与悬浮工具栏没有贴图，沿用 `fluent` 的样式，可用 `[candidate.*.menu]` 与 `[toolbar]` 改。翻页箭头、`fit_content` 的出厂值也取 `fluent` 的默认皮肤设置。
+ 
+ ### `[candidate_window.border_image]`（v2 可选）
+diff --git a/server/src/skin/candidate_skin_catalog.cpp b/server/src/skin/candidate_skin_catalog.cpp
+index f16fd34..5dcf53e 100644
+--- a/server/src/skin/candidate_skin_catalog.cpp
++++ b/server/src/skin/candidate_skin_catalog.cpp
+@@ -478,6 +478,7 @@ bool ReadGeometry(const toml::table &table, CandidateGeometry &out)
+         !ReadOptionalBool(table, "selected_bar_inside", out.selectedBarInside) ||
+         !ReadOptionalBool(table, "item_corners_follow_card", out.itemCornersFollowCard) ||
+         !ReadOptionalBool(table, "justify_rows", out.justifyRows) ||
++        !ReadOptionalBool(table, "single_line", out.singleLine) ||
+         !ReadOptionalBool(table, "trim_hidden_preedit_gap", out.trimHiddenPreeditGap) ||
+         !ReadEnum(table, "page_arrow_style", {"chevron", "triangle"}, out.pageArrowStyle))
+     {
+@@ -500,12 +501,82 @@ bool ReadGeometry(const toml::table &table, CandidateGeometry &out)
+     return true;
+ }
+ 
++bool ReadItemSeparators(const toml::node *node, std::optional<ItemSeparators> &out)
++{
++    if (!node)
++        return true;
++    const auto *table = node->as_table();
++    if (!table)
++        return false;
++    ItemSeparators separators;
++    if (!table->contains("color") || !ReadCssColor(*table, "color", separators.color) || separators.color.empty())
++        return false;
++    const auto readRequired = [table](const char *key, double &value) {
++        if (!table->contains(key))
++            return false;
++        value = BoundedNumber(*table, key, 4096.0);
++        return value >= 0.0;
++    };
++    if (!readRequired("top_dip", separators.topDip) || !readRequired("bottom_dip", separators.bottomDip) ||
++        !readRequired("line_width_dip", separators.lineWidthDip) ||
++        !readRequired("line_gap_dip", separators.lineGapDip) || separators.bottomDip <= separators.topDip ||
++        separators.lineWidthDip <= 0.0 || separators.lineGapDip < separators.lineWidthDip)
++        return false;
++    out = std::move(separators);
++    return true;
++}
++
++bool ReadBandArtwork(const toml::node *node, std::optional<BandArtwork> &out)
++{
++    if (!node)
++        return true;
++    const auto *table = node->as_table();
++    if (!table)
++        return false;
++    BandArtwork artwork;
++    const auto readPng = [table](const char *key, std::string &path) {
++        if (!table->contains(key) || !ReadResource(*table, key, path))
++            return false;
++        std::string extension = std::filesystem::u8path(path).extension().string();
++        std::transform(extension.begin(), extension.end(), extension.begin(),
++                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
++        return extension == ".png";
++    };
++    if (!readPng("background", artwork.background) || !readPng("foreground", artwork.foreground) ||
++        !table->contains("width_dip") || !table->contains("height_dip") || !table->contains("offset_y_dip") ||
++        !table->contains("foreground_right_clip_dip"))
++        return false;
++    artwork.widthDip = BoundedNumber(*table, "width_dip", 4096.0);
++    artwork.heightDip = BoundedNumber(*table, "height_dip", 4096.0);
++    artwork.foregroundRightClipDip = BoundedNumber(*table, "foreground_right_clip_dip", 4096.0);
++    double offsetXDip = 0.0;
++    if (artwork.widthDip <= 0.0 || artwork.heightDip <= 0.0 || artwork.foregroundRightClipDip < 0.0 ||
++        artwork.foregroundRightClipDip > artwork.widthDip ||
++        !ReadSignedNumber(*table, "offset_y_dip", 4096.0, artwork.offsetYDip) ||
++        !ReadSignedNumber(*table, "offset_x_dip", 0.0, offsetXDip))
++        return false;
++    out = std::move(artwork);
++    return true;
++}
++
+ // 外部皮肤与内置皮肤清单共用的外观键：[candidate_window] 里的圆角、线宽、阴影与版式（含 horizontal /
+ // vertical 子表），[candidate.*] 配色，[toolbar] 配色与圆角。只覆盖写了的键，所以内置清单可以叠在出厂外观上读。
+ bool ReadLook(const toml::table &root, Package &package, std::string *error)
+ {
+     if (const auto *window = root["candidate_window"].as_table())
+     {
++        if (!ReadBandArtwork(window->get("band_artwork"), package.bandArtwork))
++        {
++            SetError(error, "candidate_window.band_artwork 必须给出相对 PNG 路径、0–4096 的正尺寸、"
++                            "有限 offset_y_dip 与不大于 width_dip 的 foreground_right_clip_dip；offset_x_dip 只能为 0");
++            return false;
++        }
++        if (!ReadItemSeparators(window->get("item_separators"), package.itemSeparators))
++        {
++            SetError(error, "candidate_window.item_separators 必须给出颜色与 0–4096 的有限 DIP 数值；"
++                            "bottom_dip 必须大于 top_dip，line_width_dip 必须大于 0，line_gap_dip 不得小于线宽");
++            return false;
++        }
+         if (window->contains("corner_radius_dip"))
+         {
+             const double radius = BoundedNumber(*window, "corner_radius_dip", 32.0);
+@@ -895,6 +966,29 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
+             SetError(error, "candidate_window.min_width_dip 超出范围");
+             return std::nullopt;
+         }
++        if (!ReadOptionalBounded(*window, "max_width_dip", 4096.0, package.maxWidthDip) ||
++            (package.maxWidthDip && *package.maxWidthDip < 1.0))
++        {
++            SetError(error, "candidate_window.max_width_dip 必须是 1–4096 的有限数值");
++            return std::nullopt;
++        }
++        if (package.maxWidthDip && package.minWidthDip > *package.maxWidthDip)
++        {
++            SetError(error, "candidate_window.min_width_dip 不得大于 max_width_dip");
++            return std::nullopt;
++        }
++        std::optional<bool> reserveMaxWidth;
++        if (!ReadOptionalBool(*window, "reserve_max_width", reserveMaxWidth))
++        {
++            SetError(error, "candidate_window.reserve_max_width 必须是 true 或 false");
++            return std::nullopt;
++        }
++        package.reserveMaxWidth = reserveMaxWidth.value_or(false);
++        if (package.reserveMaxWidth && !package.maxWidthDip)
++        {
++            SetError(error, "candidate_window.reserve_max_width = true 时必须设置 max_width_dip");
++            return std::nullopt;
++        }
+         // 装饰图是可选的：没有这张表就没有装饰；有这张表时图片和两个尺寸都必须给出。
+         if (const toml::node *decorationNode = window->get("decoration"))
+         {
+@@ -1121,6 +1215,17 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
+             return std::nullopt;
+         }
+         std::error_code ec;
++        if (package.bandArtwork)
++        {
++            for (const auto &path : {package.bandArtwork->background, package.bandArtwork->foreground})
++            {
++                if (!std::filesystem::is_regular_file(directory / std::filesystem::u8path(path), ec))
++                {
++                    SetError(error, "找不到 candidate_window.band_artwork 的 PNG 文件");
++                    return std::nullopt;
++                }
++            }
++        }
+         if (!package.decorationImage.empty() &&
+             !std::filesystem::is_regular_file(directory / std::filesystem::u8path(package.decorationImage), ec))
+         {
+diff --git a/server/src/skin/candidate_skin_catalog.h b/server/src/skin/candidate_skin_catalog.h
+index 307286d..e466207 100644
+--- a/server/src/skin/candidate_skin_catalog.h
++++ b/server/src/skin/candidate_skin_catalog.h
+@@ -128,6 +128,8 @@ struct CandidateGeometry
+     std::optional<bool> itemCornersFollowCard;
+     // 横排时把卡片多出的宽度均分给同一行各项，高亮铺满到卡片右边
+     std::optional<bool> justifyRows;
++    // 仅横排：候选保持一行；宽度不足时限制每项文字的显示宽度，不改变原始候选或序号。
++    std::optional<bool> singleLine;
+     // 隐藏预编辑行时抵掉它与候选之间的 2 DIP 行距
+     std::optional<bool> trimHiddenPreeditGap;
+     // 翻页箭头样式：chevron（折线）/ triangle（实心三角，横排前面隔一条分隔线）；为空沿用 base
+@@ -157,6 +159,29 @@ struct FreeDecoration
+     int zIndex = 2;
+ };
+ 
++// 横排首行内部词间的双线；坐标相对于卡片，全部使用 DIP。没有此样式时不绘制。
++struct ItemSeparators
++{
++    std::string color;
++    double topDip = 0.0;
++    double bottomDip = 0.0;
++    double lineWidthDip = 0.0;
++    // 两条线的中心距，不小于线宽。
++    double lineGapDip = 0.0;
++};
++
++// 固定比例的横排飘带：背景固定在左侧并裁去右端，前景整图随卡片右端移动。
++// 两层都在同一候选窗口内、文字之前绘制，不参与测量或命中测试。
++struct BandArtwork
++{
++    std::string background;
++    std::string foreground;
++    double widthDip = 0.0;
++    double heightDip = 0.0;
++    double offsetYDip = 0.0;
++    double foregroundRightClipDip = 0.0;
++};
++
+ struct Package
+ {
+     // 皮肤规范版本：1 为通用现代卡片皮肤，2 为支持九宫格与自由挂件的高级皮肤。v2 必须以 canvas 为 base，
+@@ -174,6 +199,13 @@ struct Package
+     std::vector<std::string> layouts;
+     std::vector<std::string> themes;
+     double minWidthDip = 0.0;
++    // 横排卡片的最大宽度（1–4096 DIP），包含内容内边距，不含阴影与 outer_insets_dip；未设置时不增加限制。
++    // min_width_dip 不得大于此值。竖排忽略此限制。
++    std::optional<double> maxWidthDip;
++    // 仅横排：水平定位按不透明卡片的 max_width_dip 预留，不计 frame、阴影与 outer 留白。
++    // 预留不改变实际卡片或宿主窗口的宽高，也不改变垂直定位；实际宽度仍随内容变化。
++    // 默认关闭；开启时必须设置 max_width_dip。
++    bool reserveMaxWidth = false;
+     // 覆盖基础皮肤的候选框外框圆角；未设置时沿用基础皮肤。
+     std::optional<double> cornerRadiusDip;
+     // 候选框外框线宽（0–4）与候选项高亮圆角（0–16）；未设置时沿用基础皮肤。
+@@ -211,6 +243,8 @@ struct Package
+     CandidateGeometry geometry;
+     CandidateGeometry horizontalGeometry;
+     CandidateGeometry verticalGeometry;
++    std::optional<ItemSeparators> itemSeparators;
++    std::optional<BandArtwork> bandArtwork;
+     // 覆盖基础皮肤的悬浮工具栏外框圆角与图标悬停底色的圆角；未设置时沿用基础皮肤。
+     std::optional<double> toolbarCornerRadiusDip;
+     std::optional<double> toolbarIconCornerRadiusDip;
+diff --git a/server/src/window/candidate_horizontal_placement.h b/server/src/window/candidate_horizontal_placement.h
+new file mode 100644
+index 0000000..a2a2661
+--- /dev/null
++++ b/server/src/window/candidate_horizontal_placement.h
+@@ -0,0 +1,76 @@
++#pragma once
++
++#include <algorithm>
++#include <cmath>
++#include <optional>
++
++namespace FanyImeUi
++{
++struct CandidateWorkAreaPx
++{
++    int left = 0;
++    int top = 0;
++    int right = 0;
++    int bottom = 0;
++
++    bool operator==(const CandidateWorkAreaPx &other) const
++    {
++        return left == other.left && top == other.top && right == other.right && bottom == other.bottom;
++    }
++};
++
++struct CandidateReservedLeftResult
++{
++    int cardLeftPx = 0;
++    bool captured = false;
++};
++
++// Opt-in horizontal placement only. Reserve the opaque card's maximum width,
++// not its transparent host, shadow or outer insets. Actual width and Y stay
++// with the scene/presenter. A visible composition keeps its captured left even
++// if its caret advances or its candidates shrink; Hide/skin changes reset it.
++class CandidateReservedLeft
++{
++  public:
++    void Reset()
++    {
++        hasAnchor_ = false;
++    }
++
++    std::optional<CandidateReservedLeftResult> Place(int caretX, const CandidateWorkAreaPx &workArea, double scale,
++                                                     double maxCardWidthDip)
++    {
++        if (workArea.right <= workArea.left || workArea.bottom <= workArea.top || !std::isfinite(scale) ||
++            scale <= 0.0 || !std::isfinite(maxCardWidthDip) || maxCardWidthDip <= 0.0)
++        {
++            Reset();
++            return std::nullopt;
++        }
++        if (hasAnchor_ && workArea == workArea_ && scale == scale_ && maxCardWidthDip == maxCardWidthDip_)
++            return CandidateReservedLeftResult{cardLeftPx_, false};
++
++        // Calculate in doubles so negative monitors and very wide work areas
++        // cannot overflow int subtraction. Limit an oversized reservation to
++        // the available work area, retaining at least one physical pixel.
++        const double workWidth = static_cast<double>(workArea.right) - workArea.left;
++        const double edgePad = (std::min)(std::round(2.0 * scale), std::floor((workWidth - 1.0) * 0.5));
++        const double availableWidth = (std::max)(1.0, workWidth - 2.0 * edgePad);
++        const double reservedWidth = (std::min)(std::ceil(maxCardWidthDip * scale), availableWidth);
++        const double left = workArea.left + edgePad;
++        const double right = (std::max)(left, workArea.right - edgePad - reservedWidth);
++        cardLeftPx_ = static_cast<int>(std::clamp(static_cast<double>(caretX), left, right));
++        workArea_ = workArea;
++        scale_ = scale;
++        maxCardWidthDip_ = maxCardWidthDip;
++        hasAnchor_ = true;
++        return CandidateReservedLeftResult{cardLeftPx_, true};
++    }
++
++  private:
++    bool hasAnchor_ = false;
++    CandidateWorkAreaPx workArea_{};
++    double scale_ = 0.0;
++    double maxCardWidthDip_ = 0.0;
++    int cardLeftPx_ = 0;
++};
++} // namespace FanyImeUi
+diff --git a/server/src/window/candidate_item_geometry.h b/server/src/window/candidate_item_geometry.h
+new file mode 100644
+index 0000000..5c71655
+--- /dev/null
++++ b/server/src/window/candidate_item_geometry.h
+@@ -0,0 +1,91 @@
++#pragma once
++
++#include <algorithm>
++#include <cmath>
++#include <iomanip>
++#include <locale>
++#include <sstream>
++#include <string>
++#include <vector>
++
++// Geometry only: these records must never carry candidate text or labels.
++struct CandidateItemRectDip
++{
++    float x = 0.0f;
++    float y = 0.0f;
++    float width = 0.0f;
++    float height = 0.0f;
++};
++
++struct CandidateMainRowGeometry
++{
++    // Internal boundaries only. N items in the first row produce N - 1 edges.
++    std::vector<float> edgesDip;
++    // The first item's left and the last item's right; empty for no valid row.
++    std::vector<float> rangeDip;
++};
++
++inline CandidateMainRowGeometry CandidateMainRowGeometryFromBounds(const CandidateItemRectDip &card,
++                                                                   const std::vector<CandidateItemRectDip> &items)
++{
++    if (items.empty() || !std::isfinite(card.x) || !std::isfinite(card.width) || card.width <= 0.0f)
++        return {};
++    float rowY = items.front().y;
++    for (const auto &item : items)
++    {
++        if (!std::isfinite(item.x) || !std::isfinite(item.y) || !std::isfinite(item.width) ||
++            !std::isfinite(item.height) || item.width <= 0.0f || item.height <= 0.0f)
++            return {};
++        rowY = (std::min)(rowY, item.y);
++    }
++
++    CandidateMainRowGeometry result;
++    float previousRight = 0.0f;
++    for (const auto &item : items)
++    {
++        if (std::abs(item.y - rowY) > 0.01f)
++            continue;
++        const float rawLeft = item.x - card.x;
++        const float rawRight = rawLeft + item.width;
++        if (!std::isfinite(rawLeft) || !std::isfinite(rawRight) || rawLeft < -0.01f || rawRight > card.width + 0.01f)
++            return {};
++        // Float layout can cross the card edge by a few ulps. Keep every
++        // exported endpoint in the card and reject an item wholly outside it.
++        const float left = std::clamp(rawLeft, 0.0f, card.width);
++        const float right = std::clamp(rawRight, 0.0f, card.width);
++        if (right <= left)
++            return {};
++        if (result.rangeDip.empty())
++        {
++            result.rangeDip = {left, right};
++        }
++        else
++        {
++            if (left < previousRight - 0.01f)
++                return {};
++            const float edge = (previousRight + left) * 0.5f;
++            if (!std::isfinite(edge) || edge <= result.rangeDip.front() || edge >= right ||
++                (!result.edgesDip.empty() && edge <= result.edgesDip.back()))
++                return {};
++            result.edgesDip.push_back(edge);
++            result.rangeDip.back() = right;
++        }
++        previousRight = right;
++    }
++    return result;
++}
++
++inline std::wstring CandidateGeometryDipArray(const std::vector<float> &values)
++{
++    std::wostringstream output;
++    output.imbue(std::locale::classic());
++    output << L'[' << std::fixed << std::setprecision(3);
++    for (size_t index = 0; index < values.size(); ++index)
++    {
++        if (index != 0)
++            output << L',';
++        output << values[index];
++    }
++    output << L']';
++    return output.str();
++}
+diff --git a/server/src/window/candidate_presenter.cpp b/server/src/window/candidate_presenter.cpp
+index e687158..0e5effb 100644
+--- a/server/src/window/candidate_presenter.cpp
++++ b/server/src/window/candidate_presenter.cpp
+@@ -319,6 +319,9 @@ void CandidatePresenter::ApplySkin()
+     expandRowStepDip_ = result.expandRowStepDip;
+     fitContent_ = result.fitContent;
+     cardMinWidthDip_ = result.cardMinWidthDip;
++    cardMaxWidthDip_ = result.cardMaxWidthDip;
++    reserveMaxWidth_ = result.reserveMaxWidth;
++    reservedLeft_.Reset();
+     skinAnimates_ = result.skinAnimates;
+     backdropActive_ = result.backdropActive;
+     backdropRadiusDip_ = tokens.radius;
+@@ -844,13 +847,28 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
+     // deleting a character kept the stale (larger) host width, so the card's left
+     // edge froze and its right edge drifted further from the edge on every delete.
+     const int cardWidthPx = (std::max)(1, static_cast<int>(std::ceil(cardWidthDip * scale)));
+-    if (x + cardLeftPx + cardWidthPx > monitor.right)
+-    {
+-        x = monitor.right - cardLeftPx - cardWidthPx - 2;
++    const auto reserved = reserveMaxWidth_
++                              ? reservedLeft_.Place(caret.x, {monitor.left, monitor.top, monitor.right, monitor.bottom},
++                                                    scale, cardMaxWidthDip_)
++                              : std::nullopt;
++    if (reserved)
++    {
++        // A maximum-width card is positioned on the first usable frame. Only
++        // use that reservation for X; rendering, host size and Y still use the
++        // actual current card, preserving fit_content and above/below flipping.
++        x = reserved->cardLeftPx - cardLeftPx;
++        if (reserved->captured)
++            CAND_DIAG_LOGF(L"candidate-position reserve-max-width captured card_left_px={} max_width_dip={:.3f} "
++                           L"scale={:.3f} work=({},{})-({},{})",
++                           reserved->cardLeftPx, cardMaxWidthDip_, scale, monitor.left, monitor.top, monitor.right,
++                           monitor.bottom);
+     }
+-    if (x + cardLeftPx < monitor.left)
++    else
+     {
+-        x = monitor.left + 2 - cardLeftPx;
++        if (x + cardLeftPx + cardWidthPx > monitor.right)
++            x = monitor.right - cardLeftPx - cardWidthPx - 2;
++        if (x + cardLeftPx < monitor.left)
++            x = monitor.left + 2 - cardLeftPx;
+     }
+     const int cardBottom = y + cardTopPx + cardHeightPx;
+     if (cardBottom > monitor.bottom)
+@@ -906,16 +924,44 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
+         SetWindowPos(hwnd_, nullptr, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
+     }
+     SetCandidateHostCloaked(false);
+-    // Acceptance trace for the RDP candidate-scale fix: which scale authority
+-    // won, and the system's own (potentially diverging) DPI values. Coordinates
+-    // and DPI only — never user input, per the diagnostic logging red lines.
++    hasPlacementTrace_ = true;
++    lastPlacementCaret_ = caret;
++    lastPlacementFirst_ = {firstX, firstY};
++    lastPlacementScale_.scale = scale;
++    lastPlacementScale_.source = scaleSource;
++    lastPlacementWasOnScreen_ = onScreen;
++    TraceCurrentPlacement();
++}
++
++void CandidatePresenter::TraceCurrentPlacement()
++{
++    // Keep the diagnostic-off path allocation-free, including dedup shows.
++    if (!DiagnosticLog::IsEnabled())
++        return;
++    if (!hasPlacementTrace_ || !impl_ || !impl_->card || !hwnd_ || lastPlacementScale_.scale <= 0.0f)
++        return;
++    RECT host{};
++    if (!GetWindowRect(hwnd_, &host) || host.top == Global::INVALID_Y)
++        return;
++    const float scale = lastPlacementScale_.scale;
++    const msimeui::RectF card = impl_->card->GetBounds();
++    const int cardX = host.left + static_cast<int>(std::lround(card.x * scale));
++    const int cardY = host.top + static_cast<int>(std::lround(card.y * scale));
++    const int cardWidth = (std::max)(1, static_cast<int>(std::ceil(card.width * scale)));
++    const MonitorCoordinates monitor = GetMonitorCoordinatesFromPoint(lastPlacementCaret_);
++    const CandidateMainRowGeometry row = impl_->scene.MainRowGeometry();
++    // All values are numeric geometry. No candidate text, label, preedit or
++    // signature enters this trace. Arrays come from the layout just presented.
+     CAND_DIAG_LOGF(
+         L"candidate-d2d place source={} scale={:.3f} hwnd_dpi={} system_dpi={} remote={} caret=({},{}) "
+-        L"size_px=({},{}) host=({},{}) first=({},{}) on_screen={} card_px=({},{} {}w) monitor=({},{})-({},{})",
+-        scaleSource == CandidateScaleSource::RdpForeground ? L"rdp-foreground" : L"monitor", scale,
+-        GetDpiForWindow(hwnd_), GetDpiForSystem(), GetSystemMetrics(SM_REMOTESESSION) ? 1 : 0, caret.x, caret.y,
+-        hostWidthPx, hostHeightPx, x, y, firstX, firstY, onScreen, x + cardLeftPx, y + cardTopPx, cardWidthPx,
+-        monitor.left, monitor.top, monitor.right, monitor.bottom);
++        L"size_px=({},{}) host=({},{}) first=({},{}) on_screen={} card_px=({},{} {}w) monitor=({},{})-({},{}) "
++        L"item_edges_dip={} item_range_dip={}",
++        lastPlacementScale_.source == CandidateScaleSource::RdpForeground ? L"rdp-foreground" : L"monitor", scale,
++        GetDpiForWindow(hwnd_), GetDpiForSystem(), GetSystemMetrics(SM_REMOTESESSION) ? 1 : 0, lastPlacementCaret_.x,
++        lastPlacementCaret_.y, host.right - host.left, host.bottom - host.top, host.left, host.top,
++        lastPlacementFirst_.x, lastPlacementFirst_.y, lastPlacementWasOnScreen_, cardX, cardY, cardWidth, monitor.left,
++        monitor.top, monitor.right, monitor.bottom, CandidateGeometryDipArray(row.edgesDip),
++        CandidateGeometryDipArray(row.rangeDip));
+ }
+ 
+ void CandidatePresenter::ShowFromGlobalState()
+@@ -1038,7 +1084,9 @@ void CandidatePresenter::ShowFromGlobalState(POINT caret)
+             stickyCardHeightDip_ = 0.0f;
+         }
+         const msimeui::RectF natural = impl_->card->GetBounds();
+-        const float maxCardWidthDip = (std::max)(cardMinWidthDip_, maxW - kShadowPadLeft - kShadowPadRight);
++        float maxCardWidthDip = (std::max)(cardMinWidthDip_, maxW - kShadowPadLeft - kShadowPadRight);
++        if (cardMaxWidthDip_ > 0.0f)
++            maxCardWidthDip = (std::min)(maxCardWidthDip, cardMaxWidthDip_);
+         // fit_content 的卡片严格跟随文字宽度，只保留高度的只增不减。
+         stickyCardWidthDip_ = fitContent_
+                                   ? natural.width
+@@ -1083,6 +1131,8 @@ void CandidatePresenter::Hide()
+     {
+         return;
+     }
++    hasPlacementTrace_ = false;
++    reservedLeft_.Reset();
+     CloseContextMenu(false);
+     StopAnimationFrames();
+     animationClockRunning_ = false;
+diff --git a/server/src/window/candidate_presenter.h b/server/src/window/candidate_presenter.h
+index 1b59898..1d809e0 100644
+--- a/server/src/window/candidate_presenter.h
++++ b/server/src/window/candidate_presenter.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include "utils/window_utils.h"
++#include "window/candidate_horizontal_placement.h"
+ 
+ #include <cstdint>
+ #include <memory>
+@@ -19,6 +20,8 @@ class CandidatePresenter
+     void ShowFromGlobalState(POINT caret);
+     void Hide();
+     void Present();
++    // Re-emit the current numeric placement/first-row edges without repainting.
++    void TraceCurrentPlacement();
+     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam);
+ 
+   private:
+@@ -74,6 +77,9 @@ class CandidatePresenter
+     // 卡片最小宽度：默认 160，外部皮肤的 min_width_dip 与装饰图宽度可以把它撑大，
+     // 装饰图因此始终落在卡片宽度之内。
+     float cardMinWidthDip_ = 160.0f;
++    float cardMaxWidthDip_ = 0.0f;
++    bool reserveMaxWidth_ = false;
++    FanyImeUi::CandidateReservedLeft reservedLeft_;
+     // 皮肤开了 fit_content：没有默认的 160，卡片宽度也不在同一输入里只增不减。
+     bool fitContent_ = false;
+     // 只有 v2（canvas）皮肤播放动图；v1 皮肤的图片保持原先的静态首帧。
+@@ -90,6 +96,11 @@ class CandidatePresenter
+     int lastHostHeightPx_ = 0;
+     float lastLayoutWidthDip_ = 0.0f;
+     float lastLayoutHeightDip_ = 0.0f;
++    bool hasPlacementTrace_ = false;
++    POINT lastPlacementCaret_{};
++    POINT lastPlacementFirst_{};
++    ResolvedCandidateScale lastPlacementScale_{};
++    bool lastPlacementWasOnScreen_ = false;
+     // Largest card size kept for the current input (preedit + caret + page,
+     // stickyCardKey_); a new key or Hide() starts from the natural size.
+     std::wstring stickyCardKey_;
+diff --git a/server/src/window/candidate_skin_scene.cpp b/server/src/window/candidate_skin_scene.cpp
+index 81c14de..d7f4379 100644
+--- a/server/src/window/candidate_skin_scene.cpp
++++ b/server/src/window/candidate_skin_scene.cpp
+@@ -1,5 +1,7 @@
+ #include "window/candidate_skin_scene.h"
+ 
++#include "window/candidate_band_artwork_geometry.h"
++#include "window/candidate_item_separators.h"
+ #include "window/candidate_skin_layers.h"
+ #include "window/candidate_skin_overlay.h"
+ 
+@@ -11,6 +13,124 @@
+ 
+ namespace
+ {
++std::wstring Widen(const std::string &text);
++
++// Visual::SetMaxWidth clamps its result after Measure(). Restrict the input too,
++// so the candidate list measures wrapped rows and their height at the card cap.
++class CandidateWidthLimitedCard : public msimeui::Card
++{
++  public:
++    using msimeui::Card::Card;
++
++    void SetCardMaxWidth(float width)
++    {
++        maxWidthDip_ = width;
++        if (width > 0.0f)
++            SetMaxWidth(width);
++        else
++            ClearMaxWidth();
++    }
++
++    void SetItemSeparators(const std::shared_ptr<msimeui::CandidateList> &list,
++                           const std::optional<CandidateSkinCatalog::ItemSeparators> &style)
++    {
++        list_ = list;
++        separators_ = style;
++        separatorColor_ = style ? ParseCandidateCssColor(style->color, D2D1::ColorF(0, 0.0f)) : D2D1::ColorF(0, 0.0f);
++        InvalidateVisual();
++    }
++
++    void SetBandArtwork(const std::wstring &packageRoot,
++                        const std::optional<CandidateSkinCatalog::BandArtwork> &artwork)
++    {
++        bandArtwork_ = artwork;
++        bandBackground_ = artwork ? packageRoot + Widen(artwork->background) : std::wstring();
++        bandForeground_ = artwork ? packageRoot + Widen(artwork->foreground) : std::wstring();
++        InvalidateVisual();
++    }
++
++    msimeui::SizeF Measure(const msimeui::SizeF &availableSize) override
++    {
++        msimeui::SizeF constrained = availableSize;
++        if (maxWidthDip_ > 0.0f)
++            constrained.width = (std::min)(constrained.width, maxWidthDip_);
++        return msimeui::Card::Measure(constrained);
++    }
++
++    void Render(msimeui::DeviceResources &deviceResources) override
++    {
++        RenderBandArtwork(deviceResources);
++        msimeui::Card::Render(deviceResources);
++        const auto list = list_.lock();
++        ID2D1RenderTarget *target = deviceResources.GetRenderTarget();
++        if (!target || !list || !separators_ || separatorColor_.a <= 0.0f)
++            return;
++        ID2D1SolidColorBrush *brush = deviceResources.GetSolidColorBrush(separatorColor_);
++        if (!brush)
++            return;
++
++        std::vector<CandidateItemRectDip> items;
++        for (size_t index = 0; list->GetItem(index) != nullptr; ++index)
++        {
++            const msimeui::RectF bounds = list->GetItemBounds(index);
++            items.push_back({bounds.x, bounds.y, bounds.width, bounds.height});
++        }
++        const msimeui::RectF card = GetBounds();
++        const auto lines = CandidateItemSeparatorLinesFromBounds(
++            {card.x, card.y, card.width, card.height}, items, static_cast<float>(separators_->topDip),
++            static_cast<float>(separators_->bottomDip), static_cast<float>(separators_->lineWidthDip),
++            static_cast<float>(separators_->lineGapDip));
++        // Both text and separators use this render target, layout and present.
++        // No timer, diagnostic log or companion-window repaint is involved.
++        for (const auto &line : lines)
++            target->DrawLine(D2D1::Point2F(card.x + line.x, card.y + line.top),
++                             D2D1::Point2F(card.x + line.x, card.y + line.bottom), brush, line.width);
++    }
++
++  private:
++    void RenderBandArtwork(msimeui::DeviceResources &deviceResources)
++    {
++        ID2D1RenderTarget *target = deviceResources.GetRenderTarget();
++        if (!target || !bandArtwork_)
++            return;
++        const msimeui::RectF card = GetBounds();
++        const auto geometry = CandidateBandArtworkGeometryFromBounds(
++            {card.x, card.y, card.width, card.height}, static_cast<float>(bandArtwork_->widthDip),
++            static_cast<float>(bandArtwork_->heightDip), static_cast<float>(bandArtwork_->offsetYDip),
++            static_cast<float>(bandArtwork_->foregroundRightClipDip));
++        if (!geometry)
++            return;
++        const auto draw = [&](const std::wstring &path, const CandidateItemRectDip &destination) {
++            D2D1_SIZE_F sourceSize{};
++            ID2D1Bitmap *bitmap = deviceResources.GetBitmapFromFile(path, &sourceSize);
++            if (!bitmap || !std::isfinite(sourceSize.width) || !std::isfinite(sourceSize.height) ||
++                sourceSize.width <= 0.0f || sourceSize.height <= 0.0f)
++                return;
++            const D2D1_RECT_F source = D2D1::RectF(0.0f, 0.0f, sourceSize.width, sourceSize.height);
++            const D2D1_RECT_F dest = D2D1::RectF(destination.x, destination.y, destination.x + destination.width,
++                                                 destination.y + destination.height);
++            target->DrawBitmap(bitmap, dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, &source);
++        };
++        const CandidateItemRectDip &clip = geometry->backgroundClip;
++        if (clip.width > 0.0f)
++        {
++            target->PushAxisAlignedClip(D2D1::RectF(clip.x, clip.y, clip.x + clip.width, clip.y + clip.height),
++                                        D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
++            draw(bandBackground_, geometry->backgroundDestination);
++            target->PopAxisAlignedClip();
++        }
++        draw(bandForeground_, geometry->foregroundDestination);
++    }
++
++    float maxWidthDip_ = 0.0f;
++    std::weak_ptr<msimeui::CandidateList> list_;
++    std::optional<CandidateSkinCatalog::ItemSeparators> separators_;
++    D2D1_COLOR_F separatorColor_ = D2D1::ColorF(0, 0.0f);
++    std::optional<CandidateSkinCatalog::BandArtwork> bandArtwork_;
++    std::wstring bandBackground_;
++    std::wstring bandForeground_;
++};
++
+ D2D1_COLOR_F WithAlpha(D2D1_COLOR_F color, float alpha)
+ {
+     color.a *= alpha;
+@@ -484,7 +604,7 @@ void CandidateSkinScene::Build(bool horizontal, bool pageArrows, bool expandPane
+     brush.strokeWidth = 1.5f;
+     brush.radiusX = 6.0f;
+     brush.radiusY = 6.0f;
+-    card_ = std::make_shared<msimeui::Card>(brush, 5.0f);
++    card_ = std::make_shared<CandidateWidthLimitedCard>(brush, 5.0f);
+     card_->SetHorizontalAlignment(msimeui::HorizontalAlignment::Leading);
+     card_->AddChild(body_);
+     root_->SetHorizontalContentAlignment(msimeui::HorizontalAlignment::Leading);
+@@ -635,6 +755,8 @@ CandidateSkinScene::Result CandidateSkinScene::Apply(const Settings &settings)
+     appearance.outerCornerRadius = tokens.outerItemRadius;
+     appearance.outerTopCornersEnabled = preeditHidden;
+     appearance.justifyHorizontalRows = tokens.justifyRows;
++    appearance.horizontalSingleLine =
++        horizontalLayout && package && package->horizontalGeometry.singleLine.value_or(false);
+     // 隐藏的预编辑行高度为 0，但 body 仍在它和列表之间留 2px 行距；贴角皮肤把它抵掉，
+     // 让首项贴着卡片的内容顶边。
+     if (preeditHidden)
+@@ -812,7 +934,13 @@ CandidateSkinScene::Result CandidateSkinScene::Apply(const Settings &settings)
+         cardMinWidthDip = (std::max)({cardMinWidthDip, static_cast<float>(package->minWidthDip),
+                                       static_cast<float>(package->decorationWidthDip)});
+     }
++    const float cardMaxWidthDip =
++        horizontalLayout && package && package->maxWidthDip ? static_cast<float>(*package->maxWidthDip) : 0.0f;
++    if (cardMaxWidthDip > 0.0f)
++        cardMinWidthDip = (std::min)(cardMinWidthDip, cardMaxWidthDip);
+     result.cardMinWidthDip = cardMinWidthDip;
++    result.cardMaxWidthDip = cardMaxWidthDip;
++    result.reserveMaxWidth = horizontalLayout && package && package->reserveMaxWidth;
+     // 外框上方留给阴影的空白与装饰盒重叠，装饰盒高过它时不再额外留白。
+     msimeui::Thickness framePad = settings.framePadding;
+     if (decorationPath.empty() || decorationTopDip <= 0.0f)
+@@ -881,6 +1009,11 @@ CandidateSkinScene::Result CandidateSkinScene::Apply(const Settings &settings)
+         card_->SetPadding(tokens.containerPad);
+     }
+     card_->SetMinWidth(cardMinWidthDip);
++    std::static_pointer_cast<CandidateWidthLimitedCard>(card_)->SetCardMaxWidth(cardMaxWidthDip);
++    std::static_pointer_cast<CandidateWidthLimitedCard>(card_)->SetItemSeparators(
++        list_, horizontalLayout && package ? package->itemSeparators : std::nullopt);
++    std::static_pointer_cast<CandidateWidthLimitedCard>(card_)->SetBandArtwork(
++        packageRoot, horizontalLayout && package ? package->bandArtwork : std::nullopt);
+     if (panelImage)
+     {
+         // CSS border-image 语义：切片以源图像素计，边宽以 DIP 计，fill 决定是否画中心块。
+@@ -899,3 +1032,17 @@ CandidateSkinScene::Result CandidateSkinScene::Apply(const Settings &settings)
+     result.palette = palette;
+     return result;
+ }
++
++CandidateMainRowGeometry CandidateSkinScene::MainRowGeometry() const
++{
++    if (!horizontal_ || !card_ || !list_)
++        return {};
++    std::vector<CandidateItemRectDip> items;
++    for (size_t index = 0; list_->GetItem(index) != nullptr; ++index)
++    {
++        const msimeui::RectF bounds = list_->GetItemBounds(index);
++        items.push_back({bounds.x, bounds.y, bounds.width, bounds.height});
++    }
++    const msimeui::RectF card = card_->GetBounds();
++    return CandidateMainRowGeometryFromBounds({card.x, card.y, card.width, card.height}, items);
++}
+diff --git a/server/src/window/candidate_skin_scene.h b/server/src/window/candidate_skin_scene.h
+index 9b3e9ce..3e093f0 100644
+--- a/server/src/window/candidate_skin_scene.h
++++ b/server/src/window/candidate_skin_scene.h
+@@ -3,6 +3,7 @@
+ #include "skin/candidate_skin_catalog.h"
+ #include "window/candidate_skin_palette.h"
+ #include "window/candidate_skin_tokens.h"
++#include "window/candidate_item_geometry.h"
+ 
+ #include "msimeui/Controls.h"
+ #include "msimeui/DeviceResources.h"
+@@ -171,6 +172,9 @@ class CandidateSkinScene
+         bool backdropActive = false;
+         msimeui::BackdropMaterial backdropMaterial;
+         float cardMinWidthDip = 160.0f;
++        // Zero means unconstrained. Applies only to the horizontal candidate card.
++        float cardMaxWidthDip = 0.0f;
++        bool reserveMaxWidth = false;
+         bool fitContent = false;
+         int expandRows = CandidateSkinCatalog::kDefaultExpandRows;
+         float expandRowStepDip = 30.0f;
+@@ -180,6 +184,9 @@ class CandidateSkinScene
+ 
+     Result Apply(const Settings &settings);
+ 
++    // Read after the final scene layout; values are local to the card in DIPs.
++    CandidateMainRowGeometry MainRowGeometry() const;
++
+     // 场景的根（外框所在的竖排面板）；第一次 Apply 之前为空。
+     const std::shared_ptr<msimeui::StackPanel> &Root() const
+     {
+diff --git a/server/src/window/ime_windows_candidate.cpp b/server/src/window/ime_windows_candidate.cpp
+index a20ab15..574728d 100644
+--- a/server/src/window/ime_windows_candidate.cpp
++++ b/server/src/window/ime_windows_candidate.cpp
+@@ -215,6 +215,7 @@ LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARA
+             // honest even though nothing was repainted. Without it a digit/space selection would wait
+             // out the full timeout on content that is already visible.
+             Global::PublishRenderedCandidatePageGeneration(candidatePage->generation);
++            CandidatePresenter::Instance().TraceCurrentPlacement();
+             CAND_DIAG_LOGF(L"candidate-frame path=dedup page_gen={}", candidatePage->generation);
+             return 0;
+         }
+diff --git a/server/tests/src/test_candidate_skin_catalog_non_ascii_path.cpp b/server/tests/src/test_candidate_skin_catalog_non_ascii_path.cpp
+index 80af2bd..d031f44 100644
+--- a/server/tests/src/test_candidate_skin_catalog_non_ascii_path.cpp
++++ b/server/tests/src/test_candidate_skin_catalog_non_ascii_path.cpp
+@@ -1,13 +1,18 @@
+ #include "tests/includes/test_framework.h"
+ 
+ #include "skin/candidate_skin_catalog.h"
++#include "window/candidate_band_artwork_geometry.h"
++#include "window/candidate_item_separators.h"
+ 
+ #include <windows.h>
+ 
+ #include <filesystem>
+ #include <fstream>
++#include <limits>
+ #include <string>
++#include <string_view>
+ #include <system_error>
++#include <utility>
+ 
+ namespace
+ {
+@@ -24,18 +29,46 @@ layouts = ["horizontal", "vertical"]
+ themes = ["dark", "light"]
+ 
+ [candidate_window]
+-min_width_dip = 320.0
+ )";
+ 
+ // Writes a minimal but complete external skin under <root>/skins/demo.
+-void WriteSkin(const std::filesystem::path &skins_root)
++void WriteSkin(const std::filesystem::path &skins_root, std::string_view window_fields = "min_width_dip = 320.0\n")
+ {
+     std::error_code ec;
+     std::filesystem::create_directories(skins_root / L"demo", ec);
+     REQUIRE(!ec);
+     std::ofstream manifest(skins_root / L"demo" / L"skin.toml", std::ios::binary | std::ios::trunc);
+     REQUIRE(manifest.is_open());
+-    manifest << kManifest;
++    manifest << kManifest << window_fields;
++}
++
++void WriteBandArtworkFixtures(const std::filesystem::path &skinsRoot)
++{
++    std::error_code ec;
++    std::filesystem::create_directories(skinsRoot / L"demo" / L"assets", ec);
++    REQUIRE(!ec);
++    // Manifest tests check resource paths and existence, not bitmap decoding.
++    for (const wchar_t *name : {L"background.png", L"foreground.PNG"})
++    {
++        std::ofstream image(skinsRoot / L"demo" / L"assets" / name, std::ios::binary | std::ios::trunc);
++        REQUIRE(image.is_open());
++        image << "\x89PNG\r\n\x1a\n";
++    }
++}
++
++void RemoveTestDirectory(const std::filesystem::path &directory, const std::wstring &expected_filename)
++{
++    namespace fs = std::filesystem;
++    // Windows may keep a trailing separator in TEMP. Normalize its spelling
++    // before the exact parent/name guard; MinGW's equivalent() rejects directories.
++    auto temporary_root = fs::temp_directory_path().lexically_normal();
++    if (temporary_root.filename().empty())
++        temporary_root = temporary_root.parent_path();
++    REQUIRE(directory.parent_path().lexically_normal() == temporary_root);
++    REQUIRE(directory.filename() == expected_filename);
++    std::error_code ec;
++    fs::remove_all(directory, ec);
++    REQUIRE(!ec);
+ }
+ } // namespace
+ 
+@@ -62,6 +95,8 @@ TEST_CASE(candidate_skin_catalog_loads_under_non_ascii_path)
+     std::string ascii_error;
+     const auto ascii_package = CandidateSkinCatalog::Load(ascii_root, "demo", &ascii_error);
+     REQUIRE(ascii_package.has_value());
++    REQUIRE(!ascii_package->maxWidthDip.has_value());
++    REQUIRE(!ascii_package->reserveMaxWidth);
+ 
+     // The Chinese path must behave exactly like the ASCII one, not throw and not report an error.
+     std::string non_ascii_error;
+@@ -79,3 +114,445 @@ TEST_CASE(candidate_skin_catalog_loads_under_non_ascii_path)
+ 
+     fs::remove_all(unique_root, ec);
+ }
++
++TEST_CASE(candidate_skin_catalog_validates_horizontal_max_width)
++{
++    namespace fs = std::filesystem;
++    const fs::path unique_root =
++        fs::temp_directory_path() / (L"msime-skin-width-test-" + std::to_wstring(GetCurrentProcessId()));
++    const fs::path skins_root = unique_root / L"skins";
++
++    struct ValidMaximum
++    {
++        const char *text;
++        double expected;
++    };
++    const ValidMaximum valid_values[] = {{"1", 1.0}, {"1032", 1032.0}, {"1032.0", 1032.0}, {"4096.0", 4096.0}};
++    for (const auto &value : valid_values)
++    {
++        WriteSkin(skins_root, std::string("max_width_dip = ") + value.text + "\n");
++        std::string error;
++        const auto package = CandidateSkinCatalog::Load(skins_root, "demo", &error);
++        REQUIRE(error.empty());
++        REQUIRE(package.has_value());
++        REQUIRE(package->maxWidthDip.has_value());
++        REQUIRE_EQ(*package->maxWidthDip, value.expected);
++    }
++
++    const char *invalid_values[] = {"0",    "-1",  "0.5",      "4096.01", "4097", "inf",
++                                    "-inf", "nan", "\"1032\"", "true",    "[]",   "{}"};
++    for (const char *value : invalid_values)
++    {
++        WriteSkin(skins_root, std::string("max_width_dip = ") + value + "\n");
++        std::string error;
++        REQUIRE(!CandidateSkinCatalog::Load(skins_root, "demo", &error).has_value());
++        REQUIRE(error.find("max_width_dip") != std::string::npos);
++    }
++
++    // Equality is valid; an explicit minimum above the maximum rejects the manifest.
++    WriteSkin(skins_root, "min_width_dip = 320.0\nmax_width_dip = 320.0\n");
++    std::string equal_error;
++    REQUIRE(CandidateSkinCatalog::Load(skins_root, "demo", &equal_error).has_value());
++    REQUIRE(equal_error.empty());
++
++    WriteSkin(skins_root, "min_width_dip = 320.0\nmax_width_dip = 319.0\n");
++    std::string conflict_error;
++    REQUIRE(!CandidateSkinCatalog::Load(skins_root, "demo", &conflict_error).has_value());
++    REQUIRE(conflict_error.find("min_width_dip") != std::string::npos);
++    REQUIRE(conflict_error.find("max_width_dip") != std::string::npos);
++
++    RemoveTestDirectory(unique_root, L"msime-skin-width-test-" + std::to_wstring(GetCurrentProcessId()));
++}
++
++TEST_CASE(candidate_skin_catalog_validates_reserved_horizontal_max_width)
++{
++    namespace fs = std::filesystem;
++    const fs::path unique_root =
++        fs::temp_directory_path() / (L"msime-skin-reserve-width-test-" + std::to_wstring(GetCurrentProcessId()));
++    const fs::path skins_root = unique_root / L"skins";
++
++    struct ValidReservation
++    {
++        const char *fields;
++        bool expected;
++    };
++    const ValidReservation valid_values[] = {{"", false},
++                                             {"reserve_max_width = false\n", false},
++                                             {"max_width_dip = 1032.0\n", false},
++                                             {"max_width_dip = 1032.0\nreserve_max_width = false\n", false},
++                                             {"max_width_dip = 1032.0\nreserve_max_width = true\n", true}};
++    for (const auto &value : valid_values)
++    {
++        WriteSkin(skins_root, value.fields);
++        std::string error;
++        const auto package = CandidateSkinCatalog::Load(skins_root, "demo", &error);
++        REQUIRE(error.empty());
++        REQUIRE(package.has_value());
++        REQUIRE_EQ(package->reserveMaxWidth, value.expected);
++    }
++
++    const char *invalid_values[] = {"\"true\"", "\"false\"", "\"\"", "0", "1", "0.0", "1.0", "[]", "{}"};
++    for (const char *value : invalid_values)
++    {
++        WriteSkin(skins_root, std::string("max_width_dip = 1032.0\nreserve_max_width = ") + value + "\n");
++        std::string error;
++        REQUIRE(!CandidateSkinCatalog::Load(skins_root, "demo", &error).has_value());
++        REQUIRE(error.find("reserve_max_width") != std::string::npos);
++    }
++
++    WriteSkin(skins_root, "reserve_max_width = true\n");
++    std::string missing_maximum_error;
++    REQUIRE(!CandidateSkinCatalog::Load(skins_root, "demo", &missing_maximum_error).has_value());
++    REQUIRE(missing_maximum_error.find("reserve_max_width") != std::string::npos);
++    REQUIRE(missing_maximum_error.find("max_width_dip") != std::string::npos);
++
++    RemoveTestDirectory(unique_root, L"msime-skin-reserve-width-test-" + std::to_wstring(GetCurrentProcessId()));
++}
++
++TEST_CASE(candidate_skin_catalog_loads_optional_item_separators)
++{
++    namespace fs = std::filesystem;
++    const auto directoryName = L"msime-skin-separators-test-" + std::to_wstring(GetCurrentProcessId());
++    const fs::path uniqueRoot = fs::temp_directory_path() / directoryName;
++    const fs::path skinsRoot = uniqueRoot / L"skins";
++    WriteSkin(skinsRoot);
++    auto package = CandidateSkinCatalog::Load(skinsRoot, "demo");
++    REQUIRE(package.has_value());
++    REQUIRE(!package->itemSeparators.has_value());
++    REQUIRE(!package->horizontalGeometry.singleLine.has_value());
++
++    WriteSkin(skinsRoot, R"([candidate_window.item_separators]
++color = "#ffad00"
++top_dip = 6.75
++bottom_dip = 38.25
++line_width_dip = 0.4875
++line_gap_dip = 1.05
++)");
++    std::string error;
++    package = CandidateSkinCatalog::Load(skinsRoot, "demo", &error);
++    REQUIRE(error.empty());
++    REQUIRE(package.has_value());
++    REQUIRE(package->itemSeparators.has_value());
++    REQUIRE_EQ(package->itemSeparators->color, "#ffad00");
++    REQUIRE_EQ(package->itemSeparators->topDip, 6.75);
++    REQUIRE_EQ(package->itemSeparators->bottomDip, 38.25);
++    REQUIRE_EQ(package->itemSeparators->lineWidthDip, 0.4875);
++    REQUIRE_EQ(package->itemSeparators->lineGapDip, 1.05);
++
++    // Integers and inclusive outer limits are valid; touching strokes are valid.
++    WriteSkin(skinsRoot, R"toml([candidate_window.item_separators]
++color = "rgba(255, 173, 0, 1)"
++top_dip = 0
++bottom_dip = 4096
++line_width_dip = 4096
++line_gap_dip = 4096
++)toml");
++    REQUIRE(CandidateSkinCatalog::Load(skinsRoot, "demo").has_value());
++    RemoveTestDirectory(uniqueRoot, directoryName);
++}
++
++TEST_CASE(candidate_skin_catalog_rejects_invalid_item_separator_styles)
++{
++    namespace fs = std::filesystem;
++    const auto directoryName = L"msime-skin-invalid-separators-test-" + std::to_wstring(GetCurrentProcessId());
++    const fs::path uniqueRoot = fs::temp_directory_path() / directoryName;
++    const fs::path skinsRoot = uniqueRoot / L"skins";
++    const char *keys[] = {"color", "top_dip", "bottom_dip", "line_width_dip", "line_gap_dip"};
++    const char *validValues[] = {"\"#ffad00\"", "6.75", "38.25", "0.4875", "1.05"};
++    const auto writeStyle = [&](int replacedIndex, const char *replacement, bool omit) {
++        std::string fields = "[candidate_window.item_separators]\n";
++        for (int index = 0; index < 5; ++index)
++        {
++            if (index == replacedIndex && omit)
++                continue;
++            fields +=
++                std::string(keys[index]) + " = " + (index == replacedIndex ? replacement : validValues[index]) + "\n";
++        }
++        WriteSkin(skinsRoot, fields);
++    };
++    const auto requireInvalid = [&]() {
++        std::string error;
++        REQUIRE(!CandidateSkinCatalog::Load(skinsRoot, "demo", &error).has_value());
++        REQUIRE(error.find("item_separators") != std::string::npos);
++    };
++    for (int index = 0; index < 5; ++index)
++    {
++        writeStyle(index, "", true);
++        requireInvalid();
++    }
++    for (const char *value : {"true", "[]", "\"invalid;css\"", "\"\""})
++    {
++        writeStyle(0, value, false);
++        requireInvalid();
++    }
++    for (int index = 1; index < 5; ++index)
++    {
++        for (const char *value : {"-1", "4096.01", "inf", "-inf", "nan", "true", "\"1.0\"", "[]"})
++        {
++            writeStyle(index, value, false);
++            requireInvalid();
++        }
++    }
++    for (const auto &invalid : {std::pair{2, "6.75"}, std::pair{3, "0"}, std::pair{4, "0.48"}})
++    {
++        writeStyle(invalid.first, invalid.second, false);
++        requireInvalid();
++    }
++    for (const char *value : {"true", "[]", "\"style\""})
++    {
++        WriteSkin(skinsRoot, std::string("item_separators = ") + value + "\n");
++        requireInvalid();
++    }
++    RemoveTestDirectory(uniqueRoot, directoryName);
++}
++
++TEST_CASE(candidate_skin_catalog_validates_horizontal_single_line_boolean)
++{
++    namespace fs = std::filesystem;
++    const auto directoryName = L"msime-skin-single-line-test-" + std::to_wstring(GetCurrentProcessId());
++    const fs::path uniqueRoot = fs::temp_directory_path() / directoryName;
++    const fs::path skinsRoot = uniqueRoot / L"skins";
++    for (const bool enabled : {false, true})
++    {
++        WriteSkin(skinsRoot,
++                  std::string("[candidate_window.horizontal]\nsingle_line = ") + (enabled ? "true\n" : "false\n"));
++        const auto package = CandidateSkinCatalog::Load(skinsRoot, "demo");
++        REQUIRE(package.has_value());
++        REQUIRE(package->horizontalGeometry.singleLine.has_value());
++        REQUIRE_EQ(*package->horizontalGeometry.singleLine, enabled);
++    }
++    for (const char *value : {"0", "1", "\"true\"", "\"false\"", "0.0", "[]", "{}"})
++    {
++        WriteSkin(skinsRoot, std::string("[candidate_window.horizontal]\nsingle_line = ") + value + "\n");
++        REQUIRE(!CandidateSkinCatalog::Load(skinsRoot, "demo").has_value());
++    }
++    RemoveTestDirectory(uniqueRoot, directoryName);
++}
++
++TEST_CASE(candidate_item_separators_follow_actual_nonuniform_bounds_in_current_frame)
++{
++    const CandidateItemRectDip card{100.0f, 200.0f, 500.0f, 100.0f};
++    std::vector<CandidateItemRectDip> items{
++        {150.0f, 210.0f, 80.0f, 20.0f}, {240.0f, 210.0f, 190.0f, 20.0f}, {440.0f, 210.0f, 40.0f, 20.0f}};
++    const auto first = CandidateItemSeparatorLinesFromBounds(card, items, 6.75f, 38.25f, 0.4875f, 1.05f);
++    REQUIRE_EQ(first.size(), size_t{4});
++    REQUIRE(std::abs(first[0].x - 134.475f) < 0.0001f);
++    REQUIRE(std::abs(first[1].x - 135.525f) < 0.0001f);
++    REQUIRE(std::abs(first[2].x - 334.475f) < 0.0001f);
++    REQUIRE_EQ(first[0].top, 6.75f);
++    REQUIRE_EQ(first[0].bottom, 38.25f);
++    REQUIRE_EQ(first[0].width, 0.4875f);
++
++    // The card width stays the same, but redistributing text changes the lines.
++    items[0].width += 20.0f;
++    items[1].x += 20.0f;
++    items[1].width -= 20.0f;
++    const auto second = CandidateItemSeparatorLinesFromBounds(card, items, 6.75f, 38.25f, 0.4875f, 1.05f);
++    REQUIRE_EQ(second.size(), first.size());
++    REQUIRE(std::abs(second[0].x - first[0].x - 20.0f) < 0.0001f);
++    REQUIRE_EQ(second[2].x, first[2].x);
++}
++
++TEST_CASE(candidate_item_separators_only_draw_first_row_internal_boundaries)
++{
++    const CandidateItemRectDip card{100.0f, 200.0f, 500.0f, 100.0f};
++    const std::vector<CandidateItemRectDip> items{{150.0f, 210.0f, 80.0f, 20.0f},
++                                                  {240.0f, 210.0f, 190.0f, 20.0f},
++                                                  {150.0f, 240.0f, 80.0f, 20.0f},
++                                                  {240.0f, 240.0f, 50.0f, 20.0f}};
++    const auto lines = CandidateItemSeparatorLinesFromBounds(card, items, 6.75f, 38.25f, 0.4875f, 1.05f);
++    REQUIRE_EQ(lines.size(), size_t{2});
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, {items.front()}, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, {}, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++}
++
++TEST_CASE(candidate_item_separators_reject_invalid_geometry_and_bound_strokes_to_card)
++{
++    const CandidateItemRectDip card{100.0f, 200.0f, 500.0f, 30.0f};
++    const std::vector<CandidateItemRectDip> items{{150.0f, 210.0f, 80.0f, 20.0f}, {240.0f, 210.0f, 190.0f, 20.0f}};
++    const auto lines = CandidateItemSeparatorLinesFromBounds(card, items, 6.75f, 38.25f, 0.4875f, 1.05f);
++    REQUIRE_EQ(lines.size(), size_t{2});
++    REQUIRE_EQ(lines.front().bottom, card.height);
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, items, 31.0f, 38.25f, 0.4875f, 1.05f).empty());
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, items, 6.75f, 38.25f, 0.4875f, 0.4f).empty());
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, items, 6.75f, 38.25f, 0.0f, 1.05f).empty());
++    for (const float invalid : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
++    {
++        auto invalidCard = card;
++        invalidCard.height = invalid;
++        REQUIRE(CandidateItemSeparatorLinesFromBounds(invalidCard, items, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++        auto invalidItems = items;
++        invalidItems[1].x = invalid;
++        REQUIRE(CandidateItemSeparatorLinesFromBounds(card, invalidItems, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++        REQUIRE(CandidateItemSeparatorLinesFromBounds(card, items, invalid, 38.25f, 0.4875f, 1.05f).empty());
++    }
++    auto overlapping = items;
++    overlapping[1].x = 229.0f;
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, overlapping, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++    auto outside = items;
++    outside[1].width = 600.0f;
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, outside, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++    const std::vector<CandidateItemRectDip> nearEdge{{100.0f, 210.0f, 0.1f, 20.0f}, {100.1f, 210.0f, 20.0f, 20.0f}};
++    REQUIRE(CandidateItemSeparatorLinesFromBounds(card, nearEdge, 6.75f, 38.25f, 0.4875f, 1.05f).empty());
++}
++
++TEST_CASE(candidate_skin_catalog_loads_optional_band_artwork)
++{
++    namespace fs = std::filesystem;
++    const auto directoryName = L"msime-skin-band-artwork-test-" + std::to_wstring(GetCurrentProcessId());
++    const fs::path uniqueRoot = fs::temp_directory_path() / directoryName;
++    const fs::path skinsRoot = uniqueRoot / L"skins";
++    WriteSkin(skinsRoot);
++    auto package = CandidateSkinCatalog::Load(skinsRoot, "demo");
++    REQUIRE(package.has_value());
++    REQUIRE(!package->bandArtwork.has_value());
++    WriteBandArtworkFixtures(skinsRoot);
++    const char *fields = R"([candidate_window.band_artwork]
++background = "assets/background.png"
++foreground = "assets/foreground.PNG"
++width_dip = 1032
++height_dip = 344
++offset_y_dip = -219.75
++foreground_right_clip_dip = 137.695027624309
++)";
++    for (const std::string offsetX : {std::string(), std::string("offset_x_dip = 0.0\n")})
++    {
++        WriteSkin(skinsRoot, std::string(fields) + offsetX);
++        std::string error;
++        package = CandidateSkinCatalog::Load(skinsRoot, "demo", &error);
++        REQUIRE(error.empty());
++        REQUIRE(package.has_value());
++        REQUIRE(package->bandArtwork.has_value());
++        REQUIRE_EQ(package->bandArtwork->background, "assets/background.png");
++        REQUIRE_EQ(package->bandArtwork->foreground, "assets/foreground.PNG");
++        REQUIRE_EQ(package->bandArtwork->widthDip, 1032.0);
++        REQUIRE_EQ(package->bandArtwork->heightDip, 344.0);
++        REQUIRE_EQ(package->bandArtwork->offsetYDip, -219.75);
++        REQUIRE_EQ(package->bandArtwork->foregroundRightClipDip, 137.695027624309);
++    }
++    RemoveTestDirectory(uniqueRoot, directoryName);
++}
++
++TEST_CASE(candidate_skin_catalog_rejects_invalid_band_artwork)
++{
++    namespace fs = std::filesystem;
++    const auto directoryName = L"msime-skin-invalid-band-artwork-test-" + std::to_wstring(GetCurrentProcessId());
++    const fs::path uniqueRoot = fs::temp_directory_path() / directoryName;
++    const fs::path skinsRoot = uniqueRoot / L"skins";
++    WriteBandArtworkFixtures(skinsRoot);
++    const char *keys[] = {"background", "foreground",   "width_dip",
++                          "height_dip", "offset_y_dip", "foreground_right_clip_dip"};
++    const char *validValues[] = {"\"assets/background.png\"", "\"assets/foreground.PNG\"", "1032", "344", "-219.75",
++                                 "137.695027624309"};
++    const auto writeStyle = [&](int replacedIndex, const char *replacement, bool omit) {
++        std::string fields = "[candidate_window.band_artwork]\n";
++        for (int index = 0; index < 6; ++index)
++        {
++            if (index == replacedIndex && omit)
++                continue;
++            fields +=
++                std::string(keys[index]) + " = " + (index == replacedIndex ? replacement : validValues[index]) + "\n";
++        }
++        WriteSkin(skinsRoot, fields);
++    };
++    const auto requireInvalid = [&]() {
++        std::string error;
++        REQUIRE(!CandidateSkinCatalog::Load(skinsRoot, "demo", &error).has_value());
++        REQUIRE(error.find("band_artwork") != std::string::npos);
++    };
++    for (int index = 0; index < 6; ++index)
++    {
++        writeStyle(index, "", true);
++        requireInvalid();
++    }
++    for (int index : {0, 1})
++    {
++        for (const char *value : {"true", "\"\"", "\"../background.png\"", "\"assets/background.jpg\"",
++                                  "\"C:/background.png\"", "\"assets/missing.png\""})
++        {
++            writeStyle(index, value, false);
++            requireInvalid();
++        }
++    }
++    for (int index : {2, 3})
++    {
++        for (const char *value : {"0", "-1", "4096.01", "inf", "nan", "true", "\"1032\""})
++        {
++            writeStyle(index, value, false);
++            requireInvalid();
++        }
++    }
++    for (const char *value : {"-4096.01", "4096.01", "inf", "-inf", "nan", "true", "\"-219.75\""})
++    {
++        writeStyle(4, value, false);
++        requireInvalid();
++    }
++    for (const char *value : {"-1", "1032.01", "inf", "nan", "true", "\"137\""})
++    {
++        writeStyle(5, value, false);
++        requireInvalid();
++    }
++    for (const char *value : {"0.1", "-1", "nan", "false", "\"0\""})
++    {
++        writeStyle(-1, "", false);
++        const fs::path path = skinsRoot / L"demo" / L"skin.toml";
++        {
++            std::ofstream manifest(path, std::ios::binary | std::ios::app);
++            manifest << "offset_x_dip = " << value << "\n";
++        }
++        requireInvalid();
++    }
++    for (const char *value : {"true", "[]", "\"artwork\""})
++    {
++        WriteSkin(skinsRoot, std::string("band_artwork = ") + value + "\n");
++        requireInvalid();
++    }
++    RemoveTestDirectory(uniqueRoot, directoryName);
++}
++
++TEST_CASE(candidate_band_artwork_keeps_left_texture_fixed_and_moves_right_foreground)
++{
++    constexpr float rightClip = static_cast<float>((2172.0 - 1850.0) * 0.9 * (1032.0 / 2172.0));
++    constexpr float x = 32.0f;
++    constexpr float y = 166.25f;
++    for (const float cardWidth : {693.0293f, 900.0f, 1032.0f})
++    {
++        const auto geometry =
++            CandidateBandArtworkGeometryFromBounds({x, y, cardWidth, 96.5f}, 1032.0f, 344.0f, -219.75f, rightClip);
++        REQUIRE(geometry.has_value());
++        REQUIRE_EQ(geometry->backgroundDestination.x, x);
++        REQUIRE_EQ(geometry->backgroundDestination.y, -53.5f);
++        REQUIRE_EQ(geometry->backgroundDestination.width, 1032.0f);
++        REQUIRE_EQ(geometry->backgroundDestination.height, 344.0f);
++        REQUIRE_EQ(geometry->backgroundClip.x, x);
++        REQUIRE(std::abs(geometry->backgroundClip.width - (cardWidth - rightClip)) < 0.0001f);
++        REQUIRE(std::abs(geometry->foregroundDestination.x - (x + cardWidth - 1032.0f)) < 0.0001f);
++        REQUIRE_EQ(geometry->foregroundDestination.y, geometry->backgroundDestination.y);
++        REQUIRE_EQ(geometry->foregroundDestination.width, 1032.0f);
++        REQUIRE_EQ(geometry->foregroundDestination.height, 344.0f);
++    }
++}
++
++TEST_CASE(candidate_band_artwork_clips_narrow_background_and_rejects_invalid_geometry)
++{
++    const CandidateItemRectDip card{32.0f, 166.25f, 100.0f, 96.5f};
++    const auto narrow = CandidateBandArtworkGeometryFromBounds(card, 1032.0f, 344.0f, -219.75f, 137.695027624309f);
++    REQUIRE(narrow.has_value());
++    REQUIRE_EQ(narrow->backgroundClip.width, 0.0f);
++    REQUIRE_EQ(narrow->foregroundDestination.x, -900.0f);
++    for (const float invalid : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
++    {
++        auto invalidCard = card;
++        invalidCard.width = invalid;
++        REQUIRE(!CandidateBandArtworkGeometryFromBounds(invalidCard, 1032.0f, 344.0f, -219.75f, 137.695027624309f));
++        REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, invalid, 344.0f, -219.75f, 137.695027624309f));
++        REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, invalid, -219.75f, 137.695027624309f));
++        REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, 344.0f, invalid, 137.695027624309f));
++        REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, 344.0f, -219.75f, invalid));
++    }
++    REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 0.0f, 344.0f, -219.75f, 137.695027624309f));
++    REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, -1.0f, -219.75f, 137.695027624309f));
++    REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, 344.0f, -4096.01f, 137.695027624309f));
++    REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, 344.0f, -219.75f, 1032.01f));
++    REQUIRE(!CandidateBandArtworkGeometryFromBounds(card, 1032.0f, 344.0f, -219.75f, -1.0f));
++}
+diff --git a/server/tests/src/test_candidate_view_model.cpp b/server/tests/src/test_candidate_view_model.cpp
+index 3300b7f..d543293 100644
+--- a/server/tests/src/test_candidate_view_model.cpp
++++ b/server/tests/src/test_candidate_view_model.cpp
+@@ -1,6 +1,226 @@
++#include "window/candidate_item_geometry.h"
++#include "window/candidate_horizontal_placement.h"
+ #include "window/candidate_view_model.h"
+ #include "tests/includes/test_framework.h"
+ 
++#include <limits>
++
++TEST_CASE(candidate_reserved_left_keeps_observed_growth_on_the_right)
++{
++    FanyImeUi::CandidateReservedLeft placement;
++    const FanyImeUi::CandidateWorkAreaPx work{0, 0, 2880, 1800};
++    const auto first = placement.Place(1800, work, 2.0, 1032.0);
++    REQUIRE(first.has_value());
++    REQUIRE(first->captured);
++    REQUIRE_EQ(first->cardLeftPx, 812);
++    const int cardLeftOffsetPx = 64; // Transparent 32 DIP shadow: not reserved again.
++    const int hostLeft = first->cardLeftPx - cardLeftOffsetPx;
++    int previousRight = 0;
++    for (const int actualCardWidth : {1387, 1441, 2064, 1387})
++    {
++        const auto current = placement.Place(1800, work, 2.0, 1032.0);
++        REQUIRE(current.has_value());
++        REQUIRE(!current->captured);
++        REQUIRE_EQ(current->cardLeftPx - cardLeftOffsetPx, hostLeft);
++        const int right = current->cardLeftPx + actualCardWidth;
++        REQUIRE(right <= work.right - 4);
++        if (actualCardWidth == 1441)
++            REQUIRE_EQ(right - previousRight, 54);
++        previousRight = right;
++    }
++}
++
++TEST_CASE(candidate_reserved_left_reserves_card_only_at_each_monitor_scale)
++{
++    struct ScaleCase
++    {
++        double scale;
++        int workRight;
++        int caretX;
++        int expectedLeft;
++    };
++    const ScaleCase cases[] = {
++        {1.0, 1440, 900, 406}, {1.25, 1800, 1125, 507}, {1.5, 2160, 1350, 609}, {2.0, 2880, 1800, 812}};
++    for (const auto &test : cases)
++    {
++        FanyImeUi::CandidateReservedLeft placement;
++        const auto result = placement.Place(test.caretX, {0, 40, test.workRight, 1600}, test.scale, 1032.0);
++        REQUIRE(result.has_value());
++        REQUIRE_EQ(result->cardLeftPx, test.expectedLeft);
++        REQUIRE_EQ(result->cardLeftPx + static_cast<int>(std::ceil(1032.0 * test.scale)),
++                   test.workRight - static_cast<int>(std::round(2.0 * test.scale)));
++    }
++}
++
++TEST_CASE(candidate_reserved_left_follows_composition_lifetime_and_not_horizontal_caret_advances)
++{
++    FanyImeUi::CandidateReservedLeft placement;
++    const FanyImeUi::CandidateWorkAreaPx work{0, 0, 3840, 2160};
++    REQUIRE_EQ(placement.Place(200, work, 2.0, 1032.0)->cardLeftPx, 200);
++    const auto advanced = placement.Place(500, work, 2.0, 1032.0);
++    REQUIRE_EQ(advanced->cardLeftPx, 200);
++    REQUIRE(!advanced->captured);
++    placement.Reset(); // Presenter Hide/skin change.
++    const auto nextComposition = placement.Place(500, work, 2.0, 1032.0);
++    REQUIRE_EQ(nextComposition->cardLeftPx, 500);
++    REQUIRE(nextComposition->captured);
++}
++
++TEST_CASE(candidate_reserved_left_recaptures_for_monitor_dpi_work_area_and_maximum_changes)
++{
++    FanyImeUi::CandidateReservedLeft placement;
++    REQUIRE(placement.Place(100, {0, 0, 2880, 1800}, 2.0, 1032.0)->captured);
++    const auto negativeMonitor = placement.Place(-600, {-2560, -1440, 0, 0}, 1.25, 1032.0);
++    REQUIRE(negativeMonitor->captured);
++    REQUIRE_EQ(negativeMonitor->cardLeftPx, -1293);
++    const auto workAreaChanged = placement.Place(-1700, {-2560, -1400, 0, 0}, 1.25, 1032.0);
++    REQUIRE(workAreaChanged->captured);
++    REQUIRE_EQ(workAreaChanged->cardLeftPx, -1700);
++    const auto dpiChanged = placement.Place(-600, {-2560, -1400, 0, 0}, 2.0, 1032.0);
++    REQUIRE(dpiChanged->captured);
++    REQUIRE_EQ(dpiChanged->cardLeftPx, -2068);
++    const auto maximumChanged = placement.Place(-600, {-2560, -1400, 0, 0}, 2.0, 800.0);
++    REQUIRE(maximumChanged->captured);
++    REQUIRE_EQ(maximumChanged->cardLeftPx, -1604);
++}
++
++TEST_CASE(candidate_reserved_left_handles_narrow_and_very_wide_work_areas)
++{
++    struct WorkCase
++    {
++        int left;
++        int right;
++        int caret;
++        int expected;
++    };
++    const WorkCase cases[] = {{0, 800, 700, 4}, {100, 101, 100, 100}, {-4, 0, -1, -3}, {-16000, 16000, 15000, 13932}};
++    for (const auto &test : cases)
++    {
++        FanyImeUi::CandidateReservedLeft placement;
++        const auto result = placement.Place(test.caret, {test.left, 0, test.right, 1200}, 2.0, 1032.0);
++        REQUIRE(result.has_value());
++        REQUIRE_EQ(result->cardLeftPx, test.expected);
++        REQUIRE(result->cardLeftPx >= test.left && result->cardLeftPx < test.right);
++    }
++    FanyImeUi::CandidateReservedLeft extreme;
++    const auto result =
++        extreme.Place(std::numeric_limits<int>::max(),
++                      {std::numeric_limits<int>::min(), 0, std::numeric_limits<int>::max(), 1}, 1.0, 1032.0);
++    REQUIRE(result.has_value());
++    REQUIRE_EQ(result->cardLeftPx, std::numeric_limits<int>::max() - 1034);
++}
++
++TEST_CASE(candidate_reserved_left_rejects_invalid_inputs_without_preserving_a_stale_anchor)
++{
++    FanyImeUi::CandidateReservedLeft placement;
++    const FanyImeUi::CandidateWorkAreaPx work{0, 0, 2880, 1800};
++    REQUIRE(placement.Place(100, work, 2.0, 1032.0).has_value());
++    for (const double scale :
++         {0.0, -1.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()})
++        REQUIRE(!placement.Place(100, work, scale, 1032.0).has_value());
++    REQUIRE(!placement.Place(100, work, 2.0, 0.0).has_value());
++    REQUIRE(!placement.Place(100, work, 2.0, std::numeric_limits<double>::infinity()).has_value());
++    REQUIRE(!placement.Place(100, {0, 0, 0, 1800}, 2.0, 1032.0).has_value());
++    const auto validAgain = placement.Place(300, work, 2.0, 1032.0);
++    REQUIRE(validAgain->captured);
++    REQUIRE_EQ(validAgain->cardLeftPx, 300);
++}
++
++TEST_CASE(candidate_item_geometry_uses_actual_variable_width_bounds_and_gap_midpoints)
++{
++    const auto row = CandidateMainRowGeometryFromBounds(
++        {20.0f, 30.0f, 500.0f, 50.0f},
++        {{35.0f, 40.0f, 45.0f, 30.0f}, {90.0f, 40.0f, 125.0f, 30.0f}, {225.0f, 40.0f, 75.0f, 30.0f}});
++    REQUIRE_EQ(row.edgesDip, (std::vector<float>{65.0f, 200.0f}));
++    REQUIRE_EQ(row.rangeDip, (std::vector<float>{15.0f, 280.0f}));
++    REQUIRE_EQ(CandidateGeometryDipArray(row.edgesDip), std::wstring(L"[65.000,200.000]"));
++}
++
++TEST_CASE(candidate_item_geometry_changes_when_total_width_does_not)
++{
++    const CandidateItemRectDip card{0.0f, 0.0f, 500.0f, 50.0f};
++    const auto before =
++        CandidateMainRowGeometryFromBounds(card, {{10.0f, 10.0f, 50.0f, 30.0f}, {70.0f, 10.0f, 130.0f, 30.0f}});
++    const auto after =
++        CandidateMainRowGeometryFromBounds(card, {{10.0f, 10.0f, 100.0f, 30.0f}, {120.0f, 10.0f, 80.0f, 30.0f}});
++    REQUIRE_EQ(before.rangeDip, after.rangeDip);
++    REQUIRE(before.edgesDip != after.edgesDip);
++    REQUIRE_EQ(before.edgesDip, (std::vector<float>{65.0f}));
++    REQUIRE_EQ(after.edgesDip, (std::vector<float>{115.0f}));
++}
++
++TEST_CASE(candidate_item_geometry_exports_only_first_wrapped_row)
++{
++    const auto row = CandidateMainRowGeometryFromBounds(
++        {20.0f, 30.0f, 300.0f, 100.0f},
++        {{35.0f, 40.0f, 80.0f, 30.0f}, {125.0f, 40.0f, 90.0f, 30.0f}, {35.0f, 75.0f, 200.0f, 30.0f}});
++    REQUIRE_EQ(row.edgesDip, (std::vector<float>{100.0f}));
++    REQUIRE_EQ(row.rangeDip, (std::vector<float>{15.0f, 195.0f}));
++}
++
++TEST_CASE(candidate_item_geometry_clears_for_zero_items_and_keeps_single_item_range)
++{
++    const CandidateItemRectDip card{20.0f, 30.0f, 300.0f, 100.0f};
++    const auto empty = CandidateMainRowGeometryFromBounds(card, {});
++    REQUIRE(empty.edgesDip.empty());
++    REQUIRE(empty.rangeDip.empty());
++    REQUIRE_EQ(CandidateGeometryDipArray(empty.edgesDip), std::wstring(L"[]"));
++    REQUIRE_EQ(CandidateGeometryDipArray(empty.rangeDip), std::wstring(L"[]"));
++    const auto single = CandidateMainRowGeometryFromBounds(card, {{35.0f, 40.0f, 80.0f, 30.0f}});
++    REQUIRE(single.edgesDip.empty());
++    REQUIRE_EQ(single.rangeDip, (std::vector<float>{15.0f, 95.0f}));
++}
++
++TEST_CASE(candidate_item_geometry_rejects_stale_outside_overlapping_and_nonfinite_bounds)
++{
++    const CandidateItemRectDip card{20.0f, 30.0f, 300.0f, 100.0f};
++    const std::vector<std::vector<CandidateItemRectDip>> invalid{
++        {{15.0f, 40.0f, 80.0f, 30.0f}},
++        {{35.0f, 40.0f, 300.0f, 30.0f}},
++        {{35.0f, 40.0f, 80.0f, 30.0f}, {100.0f, 40.0f, 80.0f, 30.0f}},
++        {{35.0f, 40.0f, std::numeric_limits<float>::infinity(), 30.0f}},
++        {{35.0f, std::numeric_limits<float>::quiet_NaN(), 80.0f, 30.0f}},
++        {{35.0f, 40.0f, 80.0f, 0.0f}}};
++    for (const auto &items : invalid)
++    {
++        const auto row = CandidateMainRowGeometryFromBounds(card, items);
++        REQUIRE(row.edgesDip.empty());
++        REQUIRE(row.rangeDip.empty());
++    }
++}
++
++TEST_CASE(candidate_item_geometry_remains_card_local_across_moves_and_dpi)
++{
++    // The layout gives DIPs. Only the consumer multiplies these by its monitor
++    // scale; desktop position and 100/125/150/200% must not alter the arrays.
++    for (const float scale : {1.0f, 1.25f, 1.5f, 2.0f})
++    {
++        const auto row = CandidateMainRowGeometryFromBounds(
++            {152.0f, 200.0f, 400.0f, 60.0f}, {{164.0f, 210.0f, 80.0f, 30.0f}, {252.0f, 210.0f, 120.0f, 30.0f}});
++        REQUIRE_EQ(row.edgesDip, (std::vector<float>{96.0f}));
++        REQUIRE_EQ(row.rangeDip, (std::vector<float>{12.0f, 220.0f}));
++        const float cardScreenX = 600.0f;
++        const float edgeScreenX = cardScreenX + row.edgesDip.front() * scale;
++        REQUIRE_EQ((edgeScreenX - cardScreenX) / scale, 96.0f);
++    }
++}
++
++TEST_CASE(candidate_item_geometry_keeps_tolerated_roundoff_inside_card)
++{
++    const CandidateItemRectDip card{0.0f, 0.0f, 300.0f, 100.0f};
++    const auto row =
++        CandidateMainRowGeometryFromBounds(card, {{-0.005f, 10.0f, 80.0f, 30.0f}, {90.0f, 10.0f, 210.005f, 30.0f}});
++    REQUIRE_EQ(row.rangeDip, (std::vector<float>{0.0f, 300.0f}));
++    REQUIRE_EQ(row.edgesDip.size(), size_t{1});
++    REQUIRE(row.edgesDip.front() > 0.0f && row.edgesDip.front() < 300.0f);
++    for (const float x : {-0.005f, 300.001f})
++    {
++        const auto outside = CandidateMainRowGeometryFromBounds(card, {{x, 10.0f, 0.001f, 30.0f}});
++        REQUIRE(outside.edgesDip.empty());
++        REQUIRE(outside.rangeDip.empty());
++    }
++}
++
+ TEST_CASE(candidate_view_escapes_text_and_translation_without_turning_them_into_markup)
+ {
+     CandidateViewItem item;
+diff --git a/ui/include/msimeui/Controls.h b/ui/include/msimeui/Controls.h
+index 21b9150..27d5d39 100644
+--- a/ui/include/msimeui/Controls.h
++++ b/ui/include/msimeui/Controls.h
+@@ -643,6 +643,9 @@ class CandidateList : public Visual
+         // items, spread the spare width evenly over that line's items so the
+         // last one reaches the list's right edge (full-bleed highlights).
+         bool justifyHorizontalRows = false;
++        // Horizontal only: keep every item on one row within the available
++        // width. Long display text is ellipsized; the Item strings stay whole.
++        bool horizontalSingleLine = false;
+         // Horizontal only: items narrower than this are widened to it, content
+         // stays leading. 0 keeps every item at its natural width.
+         float minItemWidth = 0.0f;
+diff --git a/ui/src/CandidateList.cpp b/ui/src/CandidateList.cpp
+index 7504c3c..84b8b6d 100644
+--- a/ui/src/CandidateList.cpp
++++ b/ui/src/CandidateList.cpp
+@@ -27,6 +27,16 @@ constexpr D2D1_DRAW_TEXT_OPTIONS kColorClipTextOptions =
+ 
+ constexpr float kCandidateItemGap = 1.0f;
+ 
++std::wstring SingleLineDisplayText(const std::wstring &text)
++{
++    std::wstring display = text;
++    for (wchar_t &ch : display)
++        if (ch == L'\r' || ch == L'\n' || ch == L'\t' || ch == L'\v' || ch == L'\f' || ch == L'\x0085' ||
++            ch == L'\x2028' || ch == L'\x2029')
++            ch = L' ';
++    return display;
++}
++
+ // Per-corner radii in top-left, top-right, bottom-right, bottom-left order.
+ void FillRoundedRectCorners(DeviceResources &deviceResources, const RectF &bounds, const float (&radii)[4],
+                             D2D1_COLOR_F fill)
+@@ -235,7 +245,7 @@ void CandidateList::StoreTextMetric(wchar_t kind, const std::wstring &text, floa
+ ComPtr<IDWriteTextLayout> CandidateList::TextLayoutFor(IDWriteFactory *factory, const std::wstring &fontFamily,
+                                                        const std::wstring &text, float fontSize, const RectF &box)
+ {
+-    if (text.empty())
++    if (text.empty() || box.width <= 0.0f || box.height <= 0.0f)
+     {
+         return {};
+     }
+@@ -246,18 +256,30 @@ ComPtr<IDWriteTextLayout> CandidateList::TextLayoutFor(IDWriteFactory *factory,
+     }
+     const float width = std::max(box.width, 1.0f);
+     const float height = std::max(box.height, 1.0f);
+-    std::wstring key = TextCacheKey(L'l', text, {fontSize, width, height});
++    const bool singleLine = orientation_ == Orientation::Horizontal && appearance_.horizontalSingleLine;
++    std::wstring key = TextCacheKey(singleLine ? L's' : L'l', text, {fontSize, width, height});
+     if (const auto found = textLayoutCache_.find(key); found != textLayoutCache_.end())
+     {
+         return found->second;
+     }
++    const std::wstring displayText = singleLine ? SingleLineDisplayText(text) : text;
+     ComPtr<IDWriteTextLayout> layout = CreateCachedTextLayout(
+-        factory, fontFamily, text, fontSize, DWRITE_FONT_WEIGHT_NORMAL, width, height, DWRITE_TEXT_ALIGNMENT_LEADING,
+-        DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_WORD_WRAPPING_WRAP, appearance_.fallbackFontFamilies);
++        factory, fontFamily, displayText, fontSize, DWRITE_FONT_WEIGHT_NORMAL, width, height,
++        DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
++        singleLine ? DWRITE_WORD_WRAPPING_NO_WRAP : DWRITE_WORD_WRAPPING_WRAP, appearance_.fallbackFontFamilies);
+     if (!layout)
+     {
+         return {};
+     }
++    if (singleLine)
++    {
++        ComPtr<IDWriteInlineObject> ellipsis;
++        if (SUCCEEDED(factory->CreateEllipsisTrimmingSign(layout.Get(), ellipsis.GetAddressOf())))
++        {
++            const DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
++            layout->SetTrimming(&trimming, ellipsis.Get());
++        }
++    }
+     if (textLayoutCache_.size() >= kMaxTextLayoutEntries)
+     {
+         textLayoutCache_.clear();
+@@ -289,8 +311,11 @@ float CandidateList::EstimateTextWidth(const std::wstring &text, float fontSize)
+         return 0.0f;
+     }
+ 
++    const bool singleLine = orientation_ == Orientation::Horizontal && appearance_.horizontalSingleLine;
++    const wchar_t metricKind = singleLine ? L's' : L'w';
++    const std::wstring displayText = singleLine ? SingleLineDisplayText(text) : text;
+     float cached = 0.0f;
+-    if (LookupTextMetric(L'w', text, fontSize, 0.0f, cached))
++    if (LookupTextMetric(metricKind, text, fontSize, 0.0f, cached))
+     {
+         return cached;
+     }
+@@ -298,13 +323,13 @@ float CandidateList::EstimateTextWidth(const std::wstring &text, float fontSize)
+     IDWriteFactory *factory = GetSharedDWriteFactory();
+     const std::wstring &fontFamily = ResolvedFontFamily();
+     ComPtr<IDWriteTextLayout> layout = CreateCachedTextLayout(
+-        factory, fontFamily, text, fontSize, DWRITE_FONT_WEIGHT_NORMAL, 4096.0f, std::max(fontSize * 2.0f, 1.0f),
++        factory, fontFamily, displayText, fontSize, DWRITE_FONT_WEIGHT_NORMAL, 4096.0f, std::max(fontSize * 2.0f, 1.0f),
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_WORD_WRAPPING_NO_WRAP,
+         appearance_.fallbackFontFamilies);
+     if (!layout)
+     {
+         float width = 0.0f;
+-        for (const wchar_t ch : text)
++        for (const wchar_t ch : displayText)
+         {
+             width += (ch < 128) ? fontSize * 0.72f : fontSize;
+         }
+@@ -316,7 +341,7 @@ float CandidateList::EstimateTextWidth(const std::wstring &text, float fontSize)
+     DWRITE_OVERHANG_METRICS overhang = {};
+     layout->GetOverhangMetrics(&overhang);
+     const float width = std::ceil(metrics.widthIncludingTrailingWhitespace + std::max(overhang.right, 0.0f) + 1.0f);
+-    StoreTextMetric(L'w', text, fontSize, 0.0f, width);
++    StoreTextMetric(metricKind, text, fontSize, 0.0f, width);
+     return width;
+ }
+ 
+@@ -348,6 +373,41 @@ CandidateList::ItemGeometry CandidateList::MeasureItem(size_t index, float width
+     const float labelX = appearance_.contentPadLeft + appearance_.textPadLeft;
+     const float labelW = std::max(EstimateTextWidth(item.label, appearance_.labelFontSize), 9.0f);
+     const float textX = labelX + labelW + appearance_.labelGap;
++    if (orientation_ == Orientation::Horizontal && appearance_.horizontalSingleLine)
++    {
++        const float contentWidth = std::max(width - textX - appearance_.contentPadRight, 0.0f);
++        const float annotationReserve =
++            item.annotation.empty()
++                ? 0.0f
++                : std::min(EstimateTextWidth(item.annotation, appearance_.annotationFontSize) + 4.0f,
++                           contentWidth * 0.25f);
++        const float translationFontSize = appearance_.fontSize * 0.78f;
++        const float translationReserve =
++            item.translation.empty()
++                ? 0.0f
++                : std::min(EstimateTextWidth(item.translation, translationFontSize) + 4.0f, contentWidth * 0.30f);
++        const float textW = std::min(EstimateTextWidth(item.text, appearance_.fontSize),
++                                     std::max(contentWidth - annotationReserve - translationReserve, 0.0f));
++        geometry.label = {labelX, 0.0f, labelW, appearance_.itemHeight};
++        geometry.text = {textX, 0.0f, textW, appearance_.itemHeight};
++        float cursor = textX + textW;
++        const float right = textX + contentWidth;
++        if (!item.annotation.empty())
++        {
++            const float x = std::min(cursor + 4.0f, right);
++            const float annotationW = std::min(EstimateTextWidth(item.annotation, appearance_.annotationFontSize),
++                                               std::max(right - x - translationReserve, 0.0f));
++            geometry.annotation = {x, 0.0f, annotationW, appearance_.itemHeight};
++            cursor = x + annotationW;
++        }
++        if (!item.translation.empty())
++        {
++            const float x = std::min(cursor + 4.0f, right);
++            geometry.translation = {x, 0.0f, std::max(right - x, 0.0f), appearance_.itemHeight};
++        }
++        geometry.bounds = {0.0f, 0.0f, width, appearance_.itemHeight};
++        return geometry;
++    }
+     const float contentWidth = std::max(width - textX - appearance_.contentPadRight, 1.0f);
+     const float textW = std::min(std::max(EstimateTextWidth(item.text, appearance_.fontSize), 8.0f), contentWidth);
+     const float textH = std::max(appearance_.itemHeight, MeasureTextHeight(item.text, appearance_.fontSize, textW));
+@@ -447,12 +507,15 @@ SizeF CandidateList::Measure(const SizeF &availableSize)
+ {
+     itemGeometry_.clear();
+     const float availableWidth = std::max(availableSize.width, 1.0f);
+-    const float gap = appearance_.itemGap;
+     const bool horizontal = orientation_ == Orientation::Horizontal;
++    const bool singleLine = horizontal && appearance_.horizontalSingleLine;
++    const float gap = singleLine && items_.size() > 1
++                          ? std::min(appearance_.itemGap, availableWidth / static_cast<float>(items_.size() - 1))
++                          : appearance_.itemGap;
+     std::vector<float> widths;
+     float maxWidth = appearance_.fitContent ? 0.0f : 80.0f;
+     // 等宽网格：可用宽度按最小列宽能放下几列（不超过 gridColumns）均分，项宽取整列。
+-    const bool grid = horizontal && appearance_.gridColumns > 0 && availableWidth < 100000.0f;
++    const bool grid = horizontal && !singleLine && appearance_.gridColumns > 0 && availableWidth < 100000.0f;
+     int columns = 1;
+     float cellWidth = availableWidth;
+     if (grid)
+@@ -470,10 +533,12 @@ SizeF CandidateList::Measure(const SizeF &availableSize)
+         const float textWidth = EstimateTextWidth(item.text, appearance_.fontSize) + textSlack +
+                                 EstimateTextWidth(item.annotation, appearance_.annotationFontSize);
+         const float translationWidth = EstimateTextWidth(item.translation, appearance_.fontSize * 0.78f);
+-        const float contentWidth =
++        float contentWidth =
+             horizontal
+                 ? std::max(textWidth, translationWidth)
+                 : textWidth + (item.translation.empty() ? 0.0f : appearance_.fontSize * 0.65f + translationWidth);
++        if (singleLine && !item.translation.empty())
++            contentWidth = textWidth + 4.0f + translationWidth;
+         float width = appearance_.contentPadLeft + appearance_.textPadLeft +
+                       std::max(EstimateTextWidth(item.label, appearance_.labelFontSize), 9.0f) + appearance_.labelGap +
+                       contentWidth + appearance_.contentPadRight;
+@@ -488,6 +553,37 @@ SizeF CandidateList::Measure(const SizeF &availableSize)
+         widths.push_back(std::min(width, availableWidth));
+         maxWidth = std::max(maxWidth, width);
+     }
++    if (singleLine && !widths.empty())
++    {
++        // Cap only long cells. Short candidates keep their natural width, and
++        // all page indices remain visible/clickable instead of wrapping below
++        // a one-row decorative skin or silently dropping candidates.
++        const float budget = std::max(availableWidth - gap * static_cast<float>(widths.size() - 1), 0.0f);
++        float sum = 0.0f;
++        float upper = 0.0f;
++        for (float width : widths)
++        {
++            sum += width;
++            upper = std::max(upper, width);
++        }
++        if (sum > budget)
++        {
++            float lower = 0.0f;
++            for (int iteration = 0; iteration < 32; ++iteration)
++            {
++                const float cap = (lower + upper) * 0.5f;
++                float cappedSum = 0.0f;
++                for (float width : widths)
++                    cappedSum += std::min(width, cap);
++                if (cappedSum > budget)
++                    upper = cap;
++                else
++                    lower = cap;
++            }
++            for (float &width : widths)
++                width = std::min(width, lower);
++        }
++    }
+     const float verticalWidth = std::min(maxWidth, availableWidth);
+     float x = 0.0f;
+     float y = 0.0f;
+@@ -497,7 +593,7 @@ SizeF CandidateList::Measure(const SizeF &availableSize)
+     {
+         auto geometry = MeasureItem(i, horizontal ? widths[i] : verticalWidth);
+         // 网格的整列宽度是除出来的，末列可能因为浮点误差多出一点点，不能因此换行。
+-        if (horizontal && x > 0.0f && x + geometry.bounds.width > availableWidth + (grid ? 0.5f : 0.0f))
++        if (horizontal && !singleLine && x > 0.0f && x + geometry.bounds.width > availableWidth + (grid ? 0.5f : 0.0f))
+         {
+             y += rowHeight + gap;
+             x = 0.0f;
+@@ -554,6 +650,15 @@ void CandidateList::Render(DeviceResources &deviceResources)
+     for (size_t index = 0; index < items_.size(); ++index)
+     {
+         const RectF itemRect = ItemRect(index);
++        const bool clipItem = orientation_ == Orientation::Horizontal && appearance_.horizontalSingleLine;
++        if (clipItem)
++        {
++            if (itemRect.width <= 0.0f || itemRect.height <= 0.0f)
++                continue;
++            target->PushAxisAlignedClip(
++                D2D1::RectF(itemRect.x, itemRect.y, itemRect.x + itemRect.width, itemRect.y + itemRect.height),
++                D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
++        }
+         const bool selected = appearance_.selectable && index == selectedIndex_;
+         const bool hovered = hoverEnabled_ && index == hoveredIndex_;
+         const bool pressed = pressed_ && index == pressedIndex_;
+@@ -687,6 +792,8 @@ void CandidateList::Render(DeviceResources &deviceResources)
+             target->DrawTextLayout(D2D1::Point2F(translationRect.x, translationRect.y), translationLayout.Get(),
+                                    translationBrush, kColorClipTextOptions);
+         }
++        if (clipItem)
++            target->PopAxisAlignedClip();
+     }
+ }
+ 
+diff --git a/ui/tests/src/test_layout.cpp b/ui/tests/src/test_layout.cpp
+index 9af56ac..c2d534a 100644
+--- a/ui/tests/src/test_layout.cpp
++++ b/ui/tests/src/test_layout.cpp
+@@ -561,3 +561,208 @@ TEST_CASE(candidate_arrangement_reflows_when_the_final_slot_is_narrower)
+     REQUIRE(list.OnMouseUp({20, 44}, 0));
+     REQUIRE(activated == 1);
+ }
++
++namespace
++{
++CandidateList::Appearance SingleLineCandidateAppearance()
++{
++    CandidateList::Appearance appearance;
++    appearance.horizontalSingleLine = true;
++    appearance.fitContent = true;
++    appearance.itemHeight = 20.25f;
++    appearance.fontSize = 15.0f;
++    appearance.labelFontSize = 11.25f;
++    appearance.annotationFontSize = 15.0f;
++    appearance.minItemWidth = 54.0f;
++    appearance.itemGap = 0.0f;
++    return appearance;
++}
++
++std::vector<CandidateList::Item> LongFirstCandidatePage()
++{
++    std::vector<CandidateList::Item> items{{L"1", std::wstring(90, L'句'), L"", L""}};
++    for (size_t i = 2; i <= 7; ++i)
++        items.push_back({std::to_wstring(i), L"候选", L"", L""});
++    return items;
++}
++
++void RequireSingleCandidateRow(CandidateList &list, size_t count, float width, float height)
++{
++    float previousRight = 0.0f;
++    for (size_t i = 0; i < count; ++i)
++    {
++        const RectF bounds = list.GetItemBounds(i);
++        REQUIRE_NEAR(bounds.y, 0.0f);
++        REQUIRE_NEAR(bounds.height, height);
++        REQUIRE(bounds.width >= 0.0f);
++        REQUIRE(bounds.x + 0.01f >= previousRight);
++        REQUIRE(bounds.x + bounds.width <= width + 0.01f);
++        previousRight = bounds.x + bounds.width;
++    }
++}
++} // namespace
++
++TEST_CASE(single_line_candidate_skin_keeps_a_long_first_sentence_and_all_seven_candidates_on_the_ribbon)
++{
++    CandidateList list;
++    const auto appearance = SingleLineCandidateAppearance();
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    list.SetItems(LongFirstCandidatePage());
++    constexpr float contentWidth = 717.0f;
++    const SizeF measured = list.MeasureInLayout({contentWidth, 2000.0f});
++    REQUIRE(measured.width <= contentWidth + 0.01f);
++    REQUIRE_NEAR(measured.height, appearance.itemHeight);
++    list.ArrangeInLayout({0.0f, 0.0f, measured.width, measured.height});
++    RequireSingleCandidateRow(list, 7, contentWidth, appearance.itemHeight);
++    REQUIRE(list.GetItem(6)->label == L"7");
++    REQUIRE(list.GetItemBounds(0).width > list.GetItemBounds(1).width);
++}
++
++TEST_CASE(single_line_candidate_width_budget_preserves_short_candidates_natural_width)
++{
++    CandidateList list;
++    list.SetAppearance(SingleLineCandidateAppearance());
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    list.SetItems({{L"2", L"候选", L"", L""}});
++    const float naturalShort = list.MeasureInLayout({2000.0f, 2000.0f}).width;
++    list.SetItems(LongFirstCandidatePage());
++    const SizeF measured = list.MeasureInLayout({717.0f, 2000.0f});
++    list.ArrangeInLayout({0.0f, 0.0f, measured.width, measured.height});
++    for (size_t i = 1; i < 7; ++i)
++        REQUIRE_NEAR(list.GetItemBounds(i).width, naturalShort);
++}
++
++TEST_CASE(single_line_candidate_long_text_annotations_and_translations_do_not_increase_height)
++{
++    CandidateList list;
++    const auto appearance = SingleLineCandidateAppearance();
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    std::vector<CandidateList::Item> items;
++    for (size_t i = 1; i <= 7; ++i)
++        items.push_back({std::to_wstring(i), std::wstring(120, L'句') + L"\n第二行", std::wstring(90, L'a'),
++                         std::wstring(100, L'b')});
++    list.SetItems(items);
++    const SizeF measured = list.MeasureInLayout({717.0f, 2000.0f});
++    REQUIRE_NEAR(measured.height, appearance.itemHeight);
++    list.ArrangeInLayout({0.0f, 0.0f, measured.width, measured.height});
++    RequireSingleCandidateRow(list, 7, 717.0f, appearance.itemHeight);
++    REQUIRE(list.GetItem(0)->text == items[0].text);
++    REQUIRE(list.GetItem(6)->annotation == items[6].annotation);
++    REQUIRE(list.GetItem(6)->translation == items[6].translation);
++}
++
++TEST_CASE(single_line_candidate_repeated_measure_and_narrower_arrange_keep_stable_geometry)
++{
++    CandidateList list;
++    const auto appearance = SingleLineCandidateAppearance();
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    list.SetItems(LongFirstCandidatePage());
++    for (float width : {717.0f, 230.0f, 30.0f, 717.0f, 230.0f})
++    {
++        list.MeasureInLayout({2000.0f, 2000.0f});
++        list.Arrange({0.0f, 0.0f, width, appearance.itemHeight});
++        std::vector<RectF> first;
++        for (size_t i = 0; i < 7; ++i)
++            first.push_back(list.GetItemBounds(i));
++        RequireSingleCandidateRow(list, 7, width, appearance.itemHeight);
++        list.InvalidateMeasure();
++        const SizeF repeated = list.MeasureInLayout({width, 2000.0f});
++        list.Arrange({0.0f, 0.0f, width, appearance.itemHeight});
++        REQUIRE_NEAR(repeated.height, appearance.itemHeight);
++        for (size_t i = 0; i < 7; ++i)
++        {
++            REQUIRE_NEAR(list.GetItemBounds(i).x, first[i].x);
++            REQUIRE_NEAR(list.GetItemBounds(i).width, first[i].width);
++        }
++    }
++}
++
++TEST_CASE(single_line_candidate_clicks_keep_all_indices_and_complete_text_at_each_dpi)
++{
++    Window window(L"candidate-single-line-hit-test", L"", 1600, 1000);
++    CandidateList list;
++    list.Attach(&window);
++    const auto appearance = SingleLineCandidateAppearance();
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    const auto items = LongFirstCandidatePage();
++    list.SetItems(items);
++    const SizeF measured = list.MeasureInLayout({717.0f, 2000.0f});
++    list.ArrangeInLayout({10.0f, 20.0f, measured.width, measured.height});
++    size_t activated = 99;
++    list.SetOnItemActivated([&](size_t index) { activated = index; });
++    for (float dpi : {96.0f, 120.0f, 144.0f, 192.0f})
++    {
++        window.SetDpiOverride(dpi);
++        for (size_t i = 0; i < items.size(); ++i)
++        {
++            const RectF bounds = list.GetItemBounds(i);
++            const POINT point{static_cast<LONG>(DipsToPixels(bounds.x + bounds.width * 0.5f, dpi)),
++                              static_cast<LONG>(DipsToPixels(bounds.y + bounds.height * 0.5f, dpi))};
++            REQUIRE(list.OnMouseDown(point, MK_LBUTTON));
++            REQUIRE(list.OnMouseUp(point, 0));
++            REQUIRE(activated == i);
++            REQUIRE(list.GetItem(activated)->text == items[i].text);
++        }
++    }
++}
++
++TEST_CASE(single_line_candidates_are_opt_in_and_do_not_change_vertical_wrapping)
++{
++    CandidateList::Appearance appearance;
++    REQUIRE(!appearance.horizontalSingleLine);
++    CandidateList list;
++    list.SetAppearance(appearance);
++    list.SetItems({{L"1", std::wstring(80, L'句'), L"", L""}, {L"2", L"候选", L"", L""}});
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    REQUIRE(list.MeasureInLayout({140.0f, 2000.0f}).height > appearance.itemHeight * 2.0f);
++    appearance.horizontalSingleLine = true;
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Vertical);
++    REQUIRE(list.MeasureInLayout({140.0f, 2000.0f}).height > appearance.itemHeight * 2.0f);
++}
++
++TEST_CASE(single_line_candidate_natural_width_includes_both_text_and_translation)
++{
++    CandidateList list;
++    auto appearance = SingleLineCandidateAppearance();
++    appearance.minItemWidth = 0.0f;
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    const auto measure = [&](const std::wstring &text, const std::wstring &translation) {
++        list.SetItems({{L"1", text, L"", translation}});
++        return list.MeasureInLayout({2000.0f, 2000.0f}).width;
++    };
++    const float overhead = measure(L"", L"");
++    const float text = measure(L"word", L"");
++    const float translation = measure(L"", L"translation");
++    const float combined = measure(L"word", L"translation");
++    REQUIRE_NEAR(combined, text + translation - overhead);
++    REQUIRE_NEAR(list.MeasureInLayout({2000.0f, 2000.0f}).height, appearance.itemHeight);
++}
++
++TEST_CASE(single_line_candidate_display_normalizes_line_separators_without_changing_committed_text)
++{
++    CandidateList list;
++    auto appearance = SingleLineCandidateAppearance();
++    appearance.minItemWidth = 0.0f;
++    list.SetAppearance(appearance);
++    list.SetOrientation(CandidateList::Orientation::Horizontal);
++    const std::wstring original = L"a\rb\nc\td\ve\ff\x0085g\x2028h\x2029i";
++    list.SetItems({{L"1", L"a b c d e f g h i", L"", L""}});
++    const SizeF normalized = list.MeasureInLayout({2000.0f, 2000.0f});
++    list.SetItems({{L"1", original, L"", L""}});
++    const SizeF separated = list.MeasureInLayout({2000.0f, 2000.0f});
++    REQUIRE_NEAR(separated.width, normalized.width);
++    REQUIRE_NEAR(separated.height, normalized.height);
++    REQUIRE(list.GetItem(0)->text == original);
++    appearance.horizontalSingleLine = false;
++    list.SetAppearance(appearance);
++    REQUIRE(list.MeasureInLayout({2000.0f, 2000.0f}).height > appearance.itemHeight);
++    appearance.horizontalSingleLine = true;
++    list.SetAppearance(appearance);
++    REQUIRE_NEAR(list.MeasureInLayout({2000.0f, 2000.0f}).width, normalized.width);
++}
+diff --git a/server/src/window/candidate_item_separators.h b/server/src/window/candidate_item_separators.h
+new file mode 100644
+--- /dev/null
++++ b/server/src/window/candidate_item_separators.h
+@@ -0,0 +1,47 @@
++#pragma once
++
++#include "window/candidate_item_geometry.h"
++
++#include <algorithm>
++#include <cmath>
++#include <vector>
++
++struct CandidateItemSeparatorLineDip
++{
++    float x = 0.0f;
++    float top = 0.0f;
++    float bottom = 0.0f;
++    float width = 0.0f;
++};
++
++// Use the same arranged item rectangles as the text. Only internal boundaries
++// of the first horizontal row are decorated; nothing is inferred from a count.
++inline std::vector<CandidateItemSeparatorLineDip> CandidateItemSeparatorLinesFromBounds(
++    const CandidateItemRectDip &card, const std::vector<CandidateItemRectDip> &items, float topDip, float bottomDip,
++    float lineWidthDip, float lineGapDip)
++{
++    if (!std::isfinite(card.x) || !std::isfinite(card.y) || !std::isfinite(card.width) || !std::isfinite(card.height) ||
++        card.width <= 0.0f || card.height <= 0.0f || !std::isfinite(topDip) || !std::isfinite(bottomDip) ||
++        !std::isfinite(lineWidthDip) || !std::isfinite(lineGapDip) || topDip < 0.0f || bottomDip <= topDip ||
++        bottomDip > 4096.0f || lineWidthDip <= 0.0f || lineWidthDip > 4096.0f || lineGapDip < lineWidthDip ||
++        lineGapDip > 4096.0f)
++        return {};
++    const float top = (std::min)(topDip, card.height);
++    const float bottom = (std::min)(bottomDip, card.height);
++    if (bottom <= top)
++        return {};
++
++    const CandidateMainRowGeometry row = CandidateMainRowGeometryFromBounds(card, items);
++    std::vector<CandidateItemSeparatorLineDip> lines;
++    const float halfGap = lineGapDip * 0.5f;
++    const float outerHalfWidth = halfGap + lineWidthDip * 0.5f;
++    for (const float edge : row.edgesDip)
++    {
++        // Reject the whole pair at an edge rather than drawing a clipped half.
++        if (edge < outerHalfWidth || edge + outerHalfWidth > card.width)
++            continue;
++        lines.push_back({edge - halfGap, top, bottom, lineWidthDip});
++        lines.push_back({edge + halfGap, top, bottom, lineWidthDip});
++    }
++    return lines;
++}
+diff --git a/server/src/window/candidate_band_artwork_geometry.h b/server/src/window/candidate_band_artwork_geometry.h
+new file mode 100644
+--- /dev/null
++++ b/server/src/window/candidate_band_artwork_geometry.h
+@@ -0,0 +1,35 @@
++#pragma once
++
++#include "window/candidate_item_geometry.h"
++
++#include <algorithm>
++#include <cmath>
++#include <optional>
++
++struct CandidateBandArtworkGeometryDip
++{
++    CandidateItemRectDip backgroundDestination;
++    CandidateItemRectDip backgroundClip;
++    CandidateItemRectDip foregroundDestination;
++};
++
++// The full-size art never stretches with the card. Only the background clip
++// and the right-anchored foreground position depend on the current card width.
++inline std::optional<CandidateBandArtworkGeometryDip> CandidateBandArtworkGeometryFromBounds(
++    const CandidateItemRectDip &card, float widthDip, float heightDip, float offsetYDip, float foregroundRightClipDip)
++{
++    if (!std::isfinite(card.x) || !std::isfinite(card.y) || !std::isfinite(card.width) || !std::isfinite(card.height) ||
++        card.width <= 0.0f || card.height <= 0.0f || !std::isfinite(widthDip) || !std::isfinite(heightDip) ||
++        !std::isfinite(offsetYDip) || !std::isfinite(foregroundRightClipDip) || widthDip <= 0.0f ||
++        widthDip > 4096.0f || heightDip <= 0.0f || heightDip > 4096.0f || std::abs(offsetYDip) > 4096.0f ||
++        foregroundRightClipDip < 0.0f || foregroundRightClipDip > widthDip)
++        return std::nullopt;
++    const float y = card.y + offsetYDip;
++    const float right = card.x + card.width;
++    if (!std::isfinite(y) || !std::isfinite(right))
++        return std::nullopt;
++    return CandidateBandArtworkGeometryDip{
++        {card.x, y, widthDip, heightDip},
++        {card.x, y, (std::max)(card.width - foregroundRightClipDip, 0.0f), heightDip},
++        {right - widthDip, y, widthDip, heightDip}};
++}

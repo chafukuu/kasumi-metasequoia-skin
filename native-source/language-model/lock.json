@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "source": {
+    "url": "https://download.fcitx-im.org/data/lm_sc.arpa-20260629.tar.zst",
+    "archive_sha256": "06808333b9173e5374cf2cb5afc12d08f5625bf9abb536489cac376fc05f2e7f",
+    "member": "lm_sc.arpa"
+  },
+  "build": {
+    "order": 3,
+    "flags": ["-s", "-a", "22", "-q", "4", "trie"]
+  },
+  "output": {
+    "path": "sc.lm",
+    "sha256": "3588b3942c8fd62e1a6bd3bae8c7cadc0faf928c175b245224ed475862218387",
+    "bytes": 34736327
+  }
+}

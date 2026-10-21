@@ -1,0 +1,79 @@
+# 大肥鱼·探头：黑白女仆装的大肥鱼从卡片上沿探出头来，气泡、蝴蝶结与蕾丝花边背景，
+# 配色取自深蓝发色、黑白女仆装和浅蓝蝴蝶结。所有图片路径都相对于本皮肤目录。
+schema_version = 1
+id = "bigfish-peek"
+name = "大肥鱼·探头"
+version = "1.0.0"
+author = "Metasequoia IME contributors"
+description = "探头版大肥鱼：从卡片上沿探出头的黑白女仆角色、气泡与蕾丝背景，深蓝底色搭配浅蓝高亮。"
+base = "fluent"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 176
+corner_radius_dip = 12
+
+# 图片裁在身体的平直下沿，贴着卡片顶边；伸到下沿以下的右手被卡片挡住，像抓着候选框。
+[candidate_window.decoration]
+image = "assets/character.png"
+top_inset_dip = 97
+width_dip = 124        # 与 496×388 的图片比例一致
+align = "right"
+
+# 大部分透明的气泡、蝴蝶结与蕾丝花边，深浅主题共用。
+[candidate_window.background]
+image = "assets/background.png"
+fit = "cover"
+opacity = 0.35
+
+[candidate.dark]
+accent = "#5BA5E6"
+selected = "rgba(91, 165, 230, 0.30)"
+hover = "rgba(91, 165, 230, 0.16)"
+surface = "#15182A"
+border = "rgba(160, 170, 200, 0.35)"
+text = "#E8EBF5"
+number = "#8FC4F2"
+translation = "#D15796"
+translation_pos = "#9A6DD780"
+translation_separator = "#D1579673"
+selected_translation = "#E295BD"
+selected_translation_pos = "#9A6DD780"
+selected_translation_separator = "#E295BD73"
+
+[candidate.light]
+accent = "#2F6FC0"
+selected = "rgba(47, 111, 192, 0.14)"
+hover = "rgba(47, 111, 192, 0.08)"
+surface = "#FAFBFE"
+border = "rgba(30, 36, 60, 0.22)"
+text = "#1E2440"
+number = "#2F6FC0"
+translation = "#C14C8A"
+translation_pos = "#6940A580"
+translation_separator = "#C14C8A73"
+selected_translation = "#A84278"
+selected_translation_pos = "#6940A580"
+selected_translation_separator = "#A8427873"
+
+[toolbar]
+corner_radius_dip = 8
+
+[toolbar.dark]
+background = "#15182A"
+border = "rgba(160, 170, 200, 0.35)"
+handle = "#5BA5E6"
+divider = "rgba(160, 170, 200, 0.24)"
+icon = "#E8EBF5"
+hover = "rgba(91, 165, 230, 0.20)"
+
+[toolbar.light]
+background = "#FAFBFE"
+border = "rgba(30, 36, 60, 0.22)"
+handle = "#2F6FC0"
+divider = "rgba(30, 36, 60, 0.14)"
+icon = "#1E2440"
+hover = "rgba(47, 111, 192, 0.10)"

@@ -1,0 +1,3 @@
+exports_files([
+    "rules-python-write-unstamped-build-data.patch",
+])

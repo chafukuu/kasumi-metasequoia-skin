@@ -1,0 +1,80 @@
+# 大肥鱼·国庆：红色女仆裙敬礼的大肥鱼站在卡片右上方，金色星星背景，配色取自红裙、金星和深蓝发色。
+# 所有图片路径都相对于本皮肤目录。
+schema_version = 1
+id = "bigfish-national-day"
+name = "大肥鱼·国庆"
+version = "1.0.0"
+author = "Metasequoia IME contributors"
+description = "国庆版大肥鱼：卡片右上方敬礼的红裙角色、金色星星背景，中国红高亮搭配金色序号。"
+base = "fluent"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 176
+corner_radius_dip = 12
+
+[candidate_window.decoration]
+image = "assets/character.png"
+top_inset_dip = 110
+width_dip = 88         # 与 352×440 的图片比例一致
+align = "right"
+
+# 大部分透明的金色星星与裙摆飘带，深浅主题共用。
+[candidate_window.background]
+image = "assets/background.png"
+fit = "cover"
+opacity = 0.35
+
+[candidate.dark]
+accent = "#E8424F"
+selected = "rgba(215, 38, 61, 0.38)"
+hover = "rgba(215, 38, 61, 0.20)"
+surface = "#1C1426"
+border = "rgba(242, 182, 50, 0.45)"
+text = "#F6EEE3"
+number = "#F2B632"
+translation = "#379AD3"
+translation_pos = "#9A6DD780"
+translation_separator = "#379AD373"
+selected_translation = "#4FA6D8"
+selected_translation_pos = "#9A6DD780"
+selected_translation_separator = "#4FA6D873"
+preedit_caret = "#F2B632"
+
+[candidate.light]
+accent = "#C8102E"
+selected = "rgba(200, 16, 46, 0.14)"
+hover = "rgba(200, 16, 46, 0.08)"
+surface = "#FFF9F0"
+border = "rgba(200, 16, 46, 0.28)"
+text = "#3A1418"
+number = "#B7791F"
+translation = "#337EA9"
+translation_pos = "#6940A580"
+translation_separator = "#337EA973"
+selected_translation = "#2A678B"
+selected_translation_pos = "#6940A580"
+selected_translation_separator = "#2A678B73"
+preedit_caret = "#C8102E"
+
+[toolbar]
+corner_radius_dip = 8
+
+[toolbar.dark]
+background = "#1C1426"
+border = "rgba(242, 182, 50, 0.45)"
+handle = "#E8424F"
+divider = "rgba(242, 182, 50, 0.30)"
+icon = "#F6EEE3"
+hover = "rgba(215, 38, 61, 0.24)"
+
+[toolbar.light]
+background = "#FFF9F0"
+border = "rgba(200, 16, 46, 0.28)"
+handle = "#C8102E"
+divider = "rgba(200, 16, 46, 0.18)"
+icon = "#3A1418"
+hover = "rgba(200, 16, 46, 0.10)"

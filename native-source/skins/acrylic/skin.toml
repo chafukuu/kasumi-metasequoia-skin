@@ -1,0 +1,39 @@
+# 亚克力：候选卡片背后是系统亚克力，模糊卡片后面的窗口。参数取 Windows 11 应用内亚克力的默认值。
+#
+# 材质按 Fluent 的配方叠三层：模糊的背景 → 亮度层 → 色调。
+#   - surface：色调的颜色，只取 RGB。
+#   - backdrop_opacity：色调的不透明度，0–1。越高越接近纯色；不写时取 surface 自带的 alpha。
+#   - backdrop_luminosity：亮度层的不透明度，0–1。越高，卡片的明暗越不受后面画面影响，
+#     亮背景上的浅色字、暗背景上的深色字都能保住对比度；调低会更通透，但对比度跟着后面走。
+# 深浅主题各写各的。系统关闭「透明效果」（设置 → 个性化 → 颜色）或不支持时，surface 按不透明画。
+
+schema_version = 1
+id = "acrylic"
+name = "亚克力 Acrylic"
+version = "0.2.0"
+author = "Metasequoia IME contributors"
+description = "候选卡片背后是系统亚克力，模糊后面的窗口，亮度层保证亮暗背景上的文字对比度。"
+base = "fluent"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+corner_radius_dip = 8
+border_width_dip = 1
+shadow = "soft"
+# 卡片背后的系统材质：none（默认）| acrylic（模糊后面的窗口）| mica（模糊桌面壁纸，见 mica 皮肤）。
+backdrop = "acrylic"
+
+[candidate.dark]
+surface = "#2c2c2c"
+border = "rgba(255, 255, 255, 0.10)"
+backdrop_opacity = 0.15
+backdrop_luminosity = 0.96
+
+[candidate.light]
+surface = "#fcfcfc"
+border = "rgba(0, 0, 0, 0.08)"
+backdrop_opacity = 0
+backdrop_luminosity = 0.85

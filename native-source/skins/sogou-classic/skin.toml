@@ -1,0 +1,83 @@
+# 搜狗经典·石墨：仿经典搜狗输入法的白底候选框。基于石墨（graphite）——石墨的选中项不画底色、
+# 不画竖条，只换文字色，正好对应经典搜狗「首选变红、其余蓝字」的样子。
+schema_version = 1
+id = "sogou-classic"
+name = "搜狗经典·石墨"
+version = "1.0.0"
+author = "Metasequoia IME contributors"
+description = "仿经典搜狗：白底浅蓝边框、蓝色拼音与候选、首选红字不铺底色，拼音下方一条浅蓝分隔线。"
+base = "graphite"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 0
+corner_radius_dip = 2
+border_width_dip = 1
+shadow = "soft"
+page_arrows = true
+
+[candidate.dark]
+accent = "#6FAEF2"
+hover = "rgba(111, 174, 242, 0.12)"
+surface = "#1F2631"
+border = "#3A5A80"
+text = "#6FAEF2"
+number = "#6FAEF2"
+translation = "#529E72"
+translation_pos = "#529CCA80"
+translation_separator = "#529E7273"
+preedit_text = "#8CBEF5"
+preedit_caret = "#FF6B6B"
+selected_text = "#FF6B6B"
+selected_number = "#FF6B6B"
+preedit_divider = "rgba(111, 174, 242, 0.28)"
+
+[candidate.dark.menu]
+background = "#1F2631"
+border = "#3A5A80"
+text = "#D6E6F7"
+hover = "rgba(111, 174, 242, 0.16)"
+
+[candidate.light]
+accent = "#1F74CC"
+hover = "rgba(31, 116, 204, 0.07)"
+surface = "#FFFFFF"
+border = "#A9CBEA"
+text = "#1F74CC"
+number = "#1F74CC"
+translation = "#448361"
+translation_pos = "#0B6E9980"
+translation_separator = "#44836173"
+preedit_text = "#2F6DB5"
+preedit_caret = "#E0201C"
+selected_text = "#E0201C"
+selected_number = "#E0201C"
+preedit_divider = "#D3E4F5"
+
+[candidate.light.menu]
+background = "#FFFFFF"
+border = "#A9CBEA"
+text = "#1F4E85"
+hover = "#EAF3FC"
+
+[toolbar]
+corner_radius_dip = 6
+
+[toolbar.dark]
+background = "#1F2631"
+border = "#3A5A80"
+handle = "#6FAEF2"
+divider = "rgba(111, 174, 242, 0.24)"
+icon = "#8CBEF5"
+hover = "rgba(111, 174, 242, 0.16)"
+
+[toolbar.light]
+background = "#FFFFFF"
+border = "#A9CBEA"
+handle = "#1F74CC"
+divider = "#D3E4F5"
+icon = "#2F6DB5"
+hover = "#EAF3FC"

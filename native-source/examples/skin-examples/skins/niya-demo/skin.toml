@@ -1,0 +1,170 @@
+# 水杉输入法官方外部皮肤样例：演示候选框的装饰图、背景图、自定义圆角、配色和工具栏样式。
+# 本文件写出了 schema_version 1 支持的全部键。除标注「必填」的以外都可以省略，省略的键沿用 base 皮肤。
+# 所有图片路径都相对于本皮肤目录，且必须留在目录之内。
+#
+# 颜色写法：所有颜色键（[candidate.*]、[candidate.*.menu]、[toolbar.*] 里除 show_selected_bar 外的键）
+# 都接受下面任意一种，不能写颜色的是数字、布尔、枚举和路径类的键。
+#   - 十六进制：#rgb、#rgba、#rrggbb、#rrggbbaa，大小写均可。
+#       必须带 #：这是清单格式的约定，与 CSS 写法一致；渲染器不带 # 也能认，但不要依赖它。
+#       不透明度在末尾（#RRGGBBAA），不是 Windows 常见的 #AARRGGBB；例如 #e9e8e89d ≈ 62% 不透明。
+#   - rgb(r, g, b) / rgba(r, g, b, a)：r、g、b 为 0–255，a 为 0–1。
+#       例如 rgba(224, 138, 168, 0.28) 与 #e08aa847 等价。
+#   - transparent：全透明，等同 #0000。
+
+# ---------------------------------------------------------------------------
+# 基本信息
+# ---------------------------------------------------------------------------
+schema_version = 1                 # 必填，皮肤格式版本，目前只能是 1
+id = "niya-demo"                   # 必填，必须与目录名一致；小写字母、数字、. _ -，最长 64 字节
+name = "Niya Demo"                 # 必填，设置页里显示的名字，最长 80 字节
+version = "0.3.0"                  # 必填，皮肤自身的版本号，最长 32 字节
+author = "Metasequoia IME contributors"  # 可选，作者，最长 120 字节
+description = "天元突破·妮娅：卡片上方右对齐的人物装饰、带星点的背景图、12dip 圆角，以及配套的悬浮工具栏配色。"  # 可选，最长 500 字节
+# 必填，继承的内置皮肤：fluent | wechat | graphite | willow_green | autumn_osmanthus | microsoft，
+# 或与 msime 共享的基底：system | shuishan | light | paper | night | ink（按 fluent 结构绘制）。
+# 全贴图基底 canvas 只用于 schema_version 2 的皮肤，见 sakura-night。
+# 下面没写的键、以及皮肤无法描述的排版（字号、间距、内边距）都取自 base。
+base = "fluent"
+
+# 必填，本皮肤支持的布局和主题；用户选了不支持的组合时不会套用本皮肤。
+[supports]
+layouts = ["horizontal", "vertical"]   # horizontal（横排）| vertical（竖排）
+themes = ["dark", "light"]             # dark（深色）| light（浅色）
+
+# ---------------------------------------------------------------------------
+# 候选框外形（必填这张表，表内各键可省略）
+# ---------------------------------------------------------------------------
+[candidate_window]
+# 卡片的最小宽度，0–1000；实际最小宽度还会被装饰图的 width_dip 撑大。
+min_width_dip = 176
+# 卡片圆角，0–32。不写则沿用 base 皮肤的圆角。
+corner_radius_dip = 12
+# 卡片外框线宽，0–4，可以是小数；颜色取下面的 border。写 0 就没有外框。
+border_width_dip = 1.5
+# 选中 / 悬停高亮的圆角，0–16；贴着卡片四角的角仍跟 corner_radius_dip。
+item_corner_radius_dip = 6
+# 卡片阴影：none | soft | strong，只影响候选卡片，不影响右键菜单。
+shadow = "soft"
+# 候选字体名，排在用户设置的字体前面，缺字时仍回落到用户字体；字号不由皮肤决定。
+# UTF-8 最长 64 字节，不能含引号、反斜杠、逗号、分号、尖括号、花括号和反引号，一次只能写一个字体。
+# Segoe UI 没有汉字，所以这里只改西文和数字，汉字仍用用户设置的字体。
+font_family = "Segoe UI"
+# 翻页箭头：true | false。横排时在候选右侧贴着最后一行，竖排时在最后一行下方、与序号左对齐；
+# 颜色取 number，悬停底色取 hover。不写则沿用数据目录 skins\default\<base>\skin.toml 里的设置（出厂为 false）。
+page_arrows = false
+
+# 卡片上方的装饰图。不需要装饰就整张表不写；写了就必须给出 image、top_inset_dip 和 width_dip。
+# 图片在 width_dip × top_inset_dip 的框里等比缩放，框贴在卡片上方，不与卡片重叠。
+[candidate_window.decoration]
+image = "assets/character.png"   # 必填，图片路径
+top_inset_dip = 88               # 必填，装饰框的高，大于 0、不超过 500
+width_dip = 102                  # 必填，装饰框的宽，大于 0、不超过 1000；与 408×353 的原图比例一致，框里不留空白
+align = "right"                  # left | center | right，相对卡片
+
+# 卡片背景图，画在底色之上、文字之下，按圆角裁剪。背景图对深浅两套主题都生效，
+# 所以这里用的是大部分透明的纹理，而不是一张实心图。不需要就整张表不写；写了就必须给出 image。
+[candidate_window.background]
+image = "assets/background.png"  # 必填，图片路径
+fit = "cover"                    # cover（铺满裁切）| contain（完整显示）| stretch（拉伸）
+opacity = 0.3                    # 0–1
+
+# ---------------------------------------------------------------------------
+# 候选配色：深色、浅色各一套，键完全相同，都可省略
+# 设置页里的「候选文字颜色」优先于 text、candidate_text 和 preedit_text。
+# ---------------------------------------------------------------------------
+[candidate.dark]
+# 基础色
+accent = "#e08aa8"                         # 主题色：预编辑光标、选中竖条的默认颜色
+selected = "rgba(224, 138, 168, 0.28)"     # 选中候选的底色
+hover = "rgba(224, 138, 168, 0.16)"        # 鼠标悬停候选的底色，也用于翻页箭头的悬停
+surface = "#202020"                        # 卡片底色（背景图画在它上面）
+border = "rgba(155, 155, 155, 0.18)"       # 卡片外框颜色
+text = "#e9e8e8"                           # 文字色，candidate_text 和 preedit_text 不写时用它
+number = "rgba(233, 232, 232, 0.62)"       # 候选序号，也是翻页箭头的颜色
+translation = "#9d68d3"                    # 翻译文字，不写时取候选文字色的 62% 不透明度
+translation_pos = "#e255a180"    # 翻译里的词性（n. / adj. …），不写时与翻译同色
+translation_separator = "#9d68d373" # 义项分隔符（; / ；），不写时与翻译同色
+show_selected_bar = true                   # 是否在选中候选左侧画一道竖条：true | false
+
+# 细分配色，不写时按注释里的规则回落
+candidate_text = "#e9e8e8"                 # 普通候选的文字，回落到 text
+preedit_text = "#f0b8cb"                   # 预编辑（拼音）文字，回落到 text
+preedit_caret = "#e08aa8"                  # 预编辑光标，回落到 accent
+selected_text = "#fff4f8"                  # 选中候选的文字，回落到 base 的选中文字色
+selected_number = "rgba(233, 232, 232, 0.62)"  # 选中候选的序号，回落到 base 的选中序号色
+selected_translation = "#c4a4e5"           # 选中候选的翻译，回落到 translation，再回落到选中文字色的 62% 不透明度
+selected_translation_pos = "#e255a180"
+selected_translation_separator = "#c4a4e573"
+selected_bar = "#e08aa8"                   # 选中候选左侧的竖条，回落到 accent
+preedit_background = "rgba(224, 138, 168, 0.10)"  # 预编辑行底色，圆角同高亮圆角；不写时透明
+preedit_divider = "rgba(224, 138, 168, 0.30)"     # 预编辑行下方的 1px 分隔线；不写时没有
+
+# 候选窗右键菜单，可省略
+[candidate.dark.menu]
+background = "#221a1e"                     # 菜单底色
+border = "rgba(224, 138, 168, 0.38)"       # 菜单边框
+text = "#f6e4eb"                           # 菜单文字
+hover = "rgba(224, 138, 168, 0.20)"        # 菜单项悬停底色
+
+[candidate.light]
+# 基础色
+accent = "#c45c7a"
+selected = "rgba(196, 92, 122, 0.18)"
+hover = "rgba(196, 92, 122, 0.10)"
+surface = "#fff7fa"
+border = "rgba(176, 80, 110, 0.22)"
+text = "#1a1a1a"
+number = "rgba(26, 26, 26, 0.55)"
+translation = "#9065b0"
+translation_pos = "#ad1a7280"
+translation_separator = "#9065b073"
+show_selected_bar = true
+
+# 细分配色
+candidate_text = "#1a1a1a"
+preedit_text = "#9c3f5c"
+preedit_caret = "#c45c7a"
+selected_text = "#1a1a1a"
+selected_number = "rgba(26, 26, 26, 0.55)"
+selected_translation = "#795594"
+selected_translation_pos = "#ad1a7280"
+selected_translation_separator = "#79559473"
+selected_bar = "#c45c7a"
+preedit_background = "rgba(196, 92, 122, 0.06)"
+preedit_divider = "rgba(176, 80, 110, 0.22)"
+
+[candidate.light.menu]
+background = "#fff7fa"
+border = "rgba(176, 80, 110, 0.22)"
+text = "#3a2a30"
+hover = "rgba(196, 92, 122, 0.12)"
+
+# ---------------------------------------------------------------------------
+# 悬浮工具栏：所有键都可省略，不写的沿用 base
+# ---------------------------------------------------------------------------
+[toolbar]
+corner_radius_dip = 8                      # 工具栏圆角，0–32
+
+[toolbar.dark]
+background = "#221a1e"                     # 工具栏底色
+border = "rgba(224, 138, 168, 0.38)"       # 工具栏边框
+handle = "#e08aa8"                         # 左侧拖动条
+divider = "rgba(224, 138, 168, 0.30)"      # 按钮之间的分隔线
+icon = "#f6e4eb"                           # 图标颜色
+hover = "rgba(224, 138, 168, 0.20)"        # 按钮悬停底色
+
+[toolbar.light]
+background = "#fff7fa"
+border = "rgba(176, 80, 110, 0.22)"
+handle = "#c45c7a"
+divider = "rgba(176, 80, 110, 0.22)"
+icon = "#3a2a30"
+hover = "rgba(196, 92, 122, 0.12)"
+
+# ---------------------------------------------------------------------------
+# 授权信息：给人看的声明，输入法不读取
+# ---------------------------------------------------------------------------
+[license]
+code = "MIT"                               # skin.toml 本身的授权
+assets = "UNVERIFIED-DEMO-ONLY"            # 图片等素材的授权
+source = "Replace this value with the asset source and permission before publishing."  # 素材来源与授权说明

@@ -1,0 +1,149 @@
+Source: opencc
+Standards-Version: 4.7.4
+Maintainer: Debian Input Method Team <debian-input-method@lists.debian.org>
+Uploaders:
+ Debian Chinese Team <chinese-developers@lists.alioth.debian.org>,
+ Asias He <asias@debian.org>,
+ YunQiang Su <syq@debian.org>,
+ Osamu Aoki <osamu@debian.org>,
+ Aron Xu <aron@debian.org>,
+ xiao sheng wen <atzlinux@sina.com>,
+ Boyuan Yang <byang@debian.org>,
+Section: libs
+Testsuite: autopkgtest-pkg-pybuild
+Build-Depends:
+ cmake,
+ debhelper-compat (= 14),
+ dh-sequence-python3,
+ doxygen <!nodoc>,
+ googletest <!nocheck>,
+ libmarisa-dev (>= 0.3.1),
+ libtclap-dev,
+ opencc <cross>,
+ dh-sequence-pkgkde-symbolshelper,
+ pybind11-dev,
+ python3-all-dev,
+ rapidjson-dev,
+ pybuild-plugin-pyproject,
+ python3-pybind11,
+ python3-pytest <!nocheck>,
+ python3-setuptools,
+ python3-wheel,
+Vcs-Browser: https://salsa.debian.org/debian/opencc
+Vcs-Git: https://salsa.debian.org/debian/opencc.git
+Homepage: https://github.com/BYVoid/OpenCC
+Description: simplified-traditional Chinese conversion library
+ opencc is a library for converting character between traditional Chinese and
+ simplified Chinese.
+
+Package: libopencc-data
+Architecture: all
+Multi-Arch: foreign
+Breaks:
+ libopencc2-data (<< 1.1.1~),
+Replaces:
+ libopencc2-data (<< 1.1.1~),
+Description: ${source:Synopsis} - configuration files
+ ${source:Extended-Description}
+ .
+ This package includes the architecture-independent conversion
+ configuration files (/usr/share/opencc/*.json). The binary conversion
+ dictionaries (*.ocd2) they refer to are shipped in libopencc1.4, as
+ their marisa-trie format is byte-order dependent.
+
+Package: libopencc-dev
+Architecture: any
+Multi-Arch: same
+Section: libdevel
+Depends:
+ libopencc1.4 (= ${binary:Version}),
+Suggests:
+ libopencc-doc,
+Description: ${source:Synopsis} - development
+ ${source:Extended-Description}
+ .
+ This package includes the development support files.
+
+Package: libopencc-doc
+Architecture: all
+Multi-Arch: foreign
+Section: doc
+Description: ${source:Synopsis} - document
+ ${source:Extended-Description}
+ .
+ This package includes the library document files.
+
+Package: libopencc1.4
+Architecture: any
+Depends:
+ libopencc-data (= ${source:Version}),
+Breaks:
+ libopencc-data (<< 1.4.1+ds1-8~),
+ libopencc1.1,
+ libopencc1.2,
+ libopencc1.3,
+Replaces:
+ libopencc-data (<< 1.4.1+ds1-8~),
+ libopencc1.1,
+ libopencc1.2,
+ libopencc1.3,
+Description: ${source:Synopsis} - runtime
+ ${source:Extended-Description}
+ .
+ This package includes the shared library and the binary conversion
+ dictionaries (/usr/share/opencc/*.ocd2).
+
+Package: opencc
+Architecture: any
+Multi-Arch: foreign
+Section: utils
+Depends:
+ libopencc1.4 (= ${binary:Version}),
+Suggests:
+ opencc-jieba,
+ libopencc-doc,
+Description: simplified-traditional Chinese conversion tool
+ ${source:Extended-Description}
+ .
+ This package includes the conversion tool.
+
+Package: opencc-jieba
+Architecture: any
+Section: utils
+Depends:
+ opencc (= ${binary:Version}),
+ opencc-jieba-data (= ${source:Version}),
+Breaks:
+ opencc-jieba-data (<< 1.4.1+ds1-8~),
+Replaces:
+ opencc-jieba-data (<< 1.4.1+ds1-8~),
+Enhances:
+ opencc,
+Description: ${source:Synopsis} - Jieba segmentation plugin
+ ${source:Extended-Description}
+ .
+ This package provides the optional Jieba-based word segmentation plugin
+ (libopencc-jieba.so) that enables word-segmentation-aware regional phrase
+ conversion, together with the merged binary Jieba dictionary
+ (/usr/share/opencc/jieba_dict/jieba_merged.ocd2).
+
+Package: opencc-jieba-data
+Architecture: all
+Multi-Arch: foreign
+Section: utils
+Description: ${source:Synopsis} - Jieba plugin data files
+ ${source:Extended-Description}
+ .
+ This package provides the architecture-independent Jieba dictionary
+ sources and the *_jieba.json configurations used by the Jieba-based word
+ segmentation plugin. The merged binary dictionary (jieba_merged.ocd2) is
+ shipped in opencc-jieba, as its marisa-trie format is byte-order
+ dependent.
+
+Package: python3-opencc
+Architecture: any
+Section: python
+Description: ${source:Synopsis} - Python 3.x
+ ${source:Extended-Description}
+ .
+ This package provides the Python 3.x module.

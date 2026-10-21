@@ -1,0 +1,26 @@
+{
+  "version": "0.5.3",
+  "upstream": "https://github.com/metasequoiaime/msime-windows",
+  "baseTag": "v0.11.1",
+  "baseCommit": "dd018f79858314ed542a47c528608752b13bd261",
+  "vendor": {
+    "cpp-pinyin": "e4dd8310e3bb6b8ac8edc42f2cbd80be92586a8e",
+    "opencc": "8cf737a4e193db27d675b2ce9867d84aace33745"
+  },
+  "nativeSha256": "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C",
+  "sourceImageSha256": "c2c798cc2896c3c23a09ed24db5c926280616cda380d6aba6098ec0a499b25c4",
+  "nativeUiAccess": false,
+  "runtimeHelperRequired": false,
+  "visualAcceptance": "2026-10-21 用户确认：已同步，显示正常",
+  "tests": {
+    "candidateLayout": "36/36",
+    "catalogAndGeometry": "13/13",
+    "crossTranslationUnitCycles": 1000,
+    "sourceSceneLayouts": 4,
+    "assetLayerChecks": "79/79"
+  },
+  "limits": [
+    "Portable installer was reviewed and mock-tested; no fresh-machine install or induced-failure rollback rehearsal.",
+    "Earlier complete upstream suite: 747/756 passed, nine unrelated existing data/path/ranking failures; two Japanese tests skipped via early return."
+  ]
+}

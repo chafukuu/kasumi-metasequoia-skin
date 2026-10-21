@@ -1,0 +1,66 @@
+name: Bug 反馈 / Bug Report
+description: 遇到出错、无法输入或显示异常？
+title: "[Bug] "
+labels: ["bug"]
+type: Bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题与行为 / Problem & Actual behavior
+      placeholder: |-
+        例如：打开记事本，切换输入法后，候选字显示成方框，无法辨认。其他软件中也会出现。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to Reproduce
+      placeholder: |-
+        1. 打开文本编辑器，切换到水杉输入法
+        2. 输入测试拼音 nihao
+        3. 观察候选字是否正常显示
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为 / Expected Behavior
+      placeholder: 例如：候选字应正常显示为汉字，按数字键可以选中。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 输入法版本 / IME Version
+      placeholder: vX.Y.Z
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统 / OS
+      description: Windows 版本与版本号 Windows edition and version.
+      placeholder: 例如 Windows 11 Pro 24H2 / Windows 10 Pro 22H2
+    validations:
+      required: true
+  - type: dropdown
+    id: scheme
+    attributes:
+      label: 输入方案 / Input Scheme
+      options:
+        - 全拼 / Full Pinyin
+        - 双拼 / Double Pinyin
+        - 五笔 / Wubi
+        - 其他 / Other
+        - 不适用 / N/A
+        - 不确定 / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他信息 / Additional Context
+      description: 例如日志、相关链接等
+    validations:
+      required: false

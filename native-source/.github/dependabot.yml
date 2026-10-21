@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 5
+
+  # Daily was the engine's cadence: it moved far faster than the frontends, and engine-bump-triage.yml
+  # absorbed that rate by auto-merging the provably inert bumps. The engine is vendored in-tree now,
+  # so what is left here is opencc and cpp-pinyin -- third-party libraries that release a few times a
+  # year. A daily poll on those is a daily no-op.
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 5

@@ -1,0 +1,32 @@
+{
+  "msime": {
+    "repository": "metasequoiaime/msime",
+    "commit": "e12279943acca455583326030a214af02c323625",
+    "path": "resources/dictionary-sources",
+    "files": {
+      "pinyin-reading-corrections.txt": {"size": 13175, "sha256": "d77fb4183d3df50ca3ebd4de6a482d5b3bc3051ed18fa7300e70fa4c7c34eb5f"},
+      "pinyin-overrides.txt": {"size": 1582, "sha256": "e2770db162955de16cf82f82368c469e5a0060dcb4ff9911424998bb4d9a0a8d"},
+      "emoji/emoji.txt": {"size": 90178, "sha256": "a6a0af0c00e6e359eb2f1be247d15a5735c2240bc248181b6946e0377e991002"},
+      "emoji/emoji_catalog.txt": {"size": 47198, "sha256": "71b4027b02b457a2cea8b988cda907763e6ee8e241a8c9c353829a464f291d60"},
+      "emoji/emoji_en.txt": {"size": 183514, "sha256": "c1b0a92e5cfc6d23a972e4afac1770b1df5e8bc848ef397d2f785161e04cac48"},
+      "kaomoji/kaomoji.txt": {"size": 55524, "sha256": "0bfcd97533596496bb13652243931a4db45d47edc9f0e8241c722a98d84950ae"}
+    }
+  },
+  "external": {
+    "ecdict.csv": {
+      "url": "https://raw.githubusercontent.com/skywind3000/ECDICT/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b/ecdict.csv",
+      "size": 65933428,
+      "sha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf"
+    },
+    "aspell6-en-2026.02.25-0.tar.bz2": {
+      "url": "https://github.com/en-wl/wordlist/releases/download/rel-2026.02.25/aspell6-en-2026.02.25-0.tar.bz2",
+      "size": 185418,
+      "sha256": "77a5cb437c45d1115f3b593802c20651d8c93803ed1073278dc1a1240016f10d"
+    },
+    "jp_sela.dict.yaml": {
+      "url": "https://raw.githubusercontent.com/Selaube/rime-jp_sela/898e09cb5e0bd3e02216165e52fef67f5a597590/jp_sela.dict.yaml",
+      "size": 78569,
+      "sha256": "fa158f3953e6f5729558ffb5bed64edfd4117fa477ab633491f0a70625c13fa6"
+    }
+  }
+}

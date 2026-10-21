@@ -1,0 +1,6 @@
+build/
+.vs/
+out/
+*.db
+# /CMakeLists.txt
+# /CMakePresets.json

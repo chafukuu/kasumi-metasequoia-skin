@@ -1,0 +1,856 @@
+load("@aspect_bazel_lib//lib:diff_test.bzl", "diff_test")
+load("@pybind11_bazel//:build_defs.bzl", "pybind_extension")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_python//python:py_library.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Public C/C++ headers consumed by the root //:opencc_lib target. Bazel 10 no
+# longer lets source files inherit package default_visibility, so export them
+# explicitly for cross-package references.
+exports_files(
+    [
+        "ConversionInspection.hpp",
+        "Export.hpp",
+        "ResourceProvider.hpp",
+        "SimpleConverter.hpp",
+        "opencc.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "all_files",
+    srcs = glob([
+        "**/*.cpp",
+        "**/*.h",
+        "**/*.hpp",
+        "**/*.inc",
+    ]),
+)
+
+cc_library(
+    name = "opencc_lib",
+    hdrs = [
+        "ConversionInspection.hpp",
+        "ResourceProvider.hpp",
+    ],
+    deps = [
+        ":binary_dict_lib",
+        ":common_lib",
+        ":config_lib",
+        ":conversion_lib",
+        ":conversion_candidates_lib",
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":darts_dict_lib",
+        ":dict_lib",
+        ":dict_converter_lib",
+        ":dict_entry_lib",
+        ":dict_group_lib",
+        ":exception_lib",
+        ":lexicon_lib",
+        ":marisa_dict_lib",
+        ":max_match_segmentation_lib",
+        ":pipeline_converter_lib",
+        ":plugin_segmentation_lib",
+        ":phrase_extract_lib",
+        ":resource_provider_lib",
+        ":segmentation_lib",
+        ":segments_lib",
+        ":serializable_dict_lib",
+        ":serialized_values_lib",
+        ":simple_converter_lib",
+        ":single_stage_converter_lib",
+        ":utf8_string_slice_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_library(
+    name = "binary_dict_lib",
+    srcs = ["BinaryDict.cpp"],
+    hdrs = ["BinaryDict.hpp"],
+    deps = [
+        ":common_lib",
+        ":lexicon_lib",
+        ":serializable_dict_lib",
+    ],
+)
+
+cc_test(
+    name = "binary_dict_test",
+    size = "small",
+    srcs = ["BinaryDictTest.cpp"],
+    deps = [
+        ":binary_dict_lib",
+        ":text_dict_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "cmd_line_output_lib",
+    hdrs = ["CmdLineOutput.hpp"],
+    visibility = ["//src/tools:__pkg__"],
+    deps = [
+        "@tclap",
+    ],
+)
+
+cc_library(
+    name = "common_lib",
+    hdrs = [
+        "Common.hpp",
+        "Export.hpp",
+        "Optional.hpp",
+    ],
+    defines = ["Opencc_BUILT_AS_STATIC"],
+)
+
+genrule(
+    name = "config_schema_inc",
+    srcs = ["//data/config:config_schema"],
+    outs = ["generated/opencc_config_schema.inc"],
+    cmd = "$(location //data/scripts:minify_json_to_inc) $< $@",
+    tools = ["//data/scripts:minify_json_to_inc"],
+)
+
+cc_library(
+    name = "config_schema_inc_lib",
+    hdrs = ["opencc_config_schema.inc"],
+)
+
+diff_test(
+    name = "config_schema_inc_sync_test",
+    file1 = ":config_schema_inc",
+    file2 = "opencc_config_schema.inc",
+)
+
+# Private header shared between Config.cpp (which builds the converter) and
+# conversion_candidates_lib (which unwraps the normalization pre-pass).
+cc_library(
+    name = "config_based_converter_lib",
+    hdrs = ["ConfigBasedConverter.hpp"],
+    visibility = ["//src:__pkg__"],
+    deps = [
+        ":converter_lib",
+    ],
+)
+
+cc_library(
+    name = "config_lib",
+    srcs = ["Config.cpp"],
+    hdrs = ["Config.hpp"],
+    deps = [
+        ":common_lib",
+        ":config_based_converter_lib",
+        ":config_schema_inc_lib",
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":darts_dict_lib",
+        ":dict_group_lib",
+        ":exception_lib",
+        ":marisa_dict_lib",
+        ":max_match_segmentation_lib",
+        ":pipeline_converter_lib",
+        ":plugin_segmentation_lib",
+        ":resource_provider_lib",
+        ":single_stage_converter_lib",
+        ":text_dict_lib",
+        ":utf8_util_lib",
+        ":win_util_lib",
+        "@rapidjson//:rapidjson",
+    ],
+)
+
+cc_library(
+    name = "resource_provider_lib",
+    srcs = ["ResourceProvider.cpp"],
+    hdrs = ["ResourceProvider.hpp"],
+    deps = [
+        ":exception_lib",
+        ":win_util_lib",
+    ],
+)
+
+cc_test(
+    name = "config_test",
+    size = "small",
+    srcs = ["ConfigTest.cpp"],
+    deps = [
+        ":common_lib",
+        ":config_lib",
+        ":config_test_base_lib",
+        ":converter_lib",
+        ":exception_lib",
+        ":resource_provider_lib",
+        ":test_utils_utf8_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "config_test_base_lib",
+    testonly = True,
+    hdrs = ["ConfigTestBase.hpp"],
+    data = ["//test/config_test"],
+    defines = ["BAZEL"],
+    deps = [
+        ":test_utils_lib",
+        "@bazel_tools//tools/cpp/runfiles",
+    ],
+)
+
+cc_library(
+    name = "conversion_lib",
+    srcs = ["Conversion.cpp"],
+    hdrs = ["Conversion.hpp"],
+    deps = [
+        ":common_lib",
+        ":prefix_match_lib",
+        ":segmentation_lib",
+        ":segments_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_test(
+    name = "conversion_test",
+    size = "small",
+    srcs = ["ConversionTest.cpp"],
+    deps = [
+        ":conversion_lib",
+        ":dict_group_test_base_lib",
+        ":marisa_dict_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "conversion_chain_lib",
+    srcs = ["ConversionChain.cpp"],
+    hdrs = ["ConversionChain.hpp"],
+    deps = [
+        ":common_lib",
+        ":conversion_lib",
+        ":segments_lib",
+    ],
+)
+
+cc_test(
+    name = "conversion_chain_test",
+    size = "small",
+    srcs = ["ConversionChainTest.cpp"],
+    deps = [
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":dict_group_test_base_lib",
+        ":max_match_segmentation_lib",
+        ":pipeline_converter_lib",
+        ":single_stage_converter_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "conversion_inspection_test",
+    size = "small",
+    srcs = ["ConversionInspectionTest.cpp"],
+    deps = [
+        ":config_test_base_lib",
+        ":conversion_inspection_lib",
+        ":segments_lib",
+        ":simple_converter_lib",
+        ":test_utils_utf8_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "conversion_inspection_lib",
+    hdrs = ["ConversionInspection.hpp"],
+)
+
+cc_library(
+    name = "converter_lib",
+    srcs = ["Converter.cpp"],
+    hdrs = [
+        "ConversionInspection.hpp",
+        "Converter.hpp",
+    ],
+    deps = [
+        ":common_lib",
+        ":segmentation_lib",
+        ":stream_window_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+# Shared streaming flush-window computation used by ConverterStream and
+# AmbiguityStream so both flush on identical boundaries. Installed alongside
+# the public headers only because ConversionAmbiguities.hpp needs
+# kDefaultStreamKeepChars; namespace opencc::internal carries no compatibility
+# guarantee.
+cc_library(
+    name = "stream_window_lib",
+    hdrs = ["StreamWindow.hpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":utf8_util_lib",
+    ],
+)
+
+# Ambiguity-annotation API (ConvertWithAmbiguities), exposed by the CLI via
+# --ambiguities.
+cc_library(
+    name = "conversion_ambiguities_lib",
+    srcs = ["ConversionAmbiguities.cpp"],
+    hdrs = ["ConversionAmbiguities.hpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":common_lib",
+        ":config_based_converter_lib",
+        ":conversion_lib",
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":dict_lib",
+        ":dict_entry_lib",
+        ":segmentation_lib",
+        ":segments_lib",
+        ":stream_window_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_test(
+    name = "conversion_ambiguities_test",
+    size = "small",
+    srcs = ["ConversionAmbiguitiesTest.cpp"],
+    deps = [
+        ":conversion_ambiguities_lib",
+        ":conversion_lib",
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":dict_group_lib",
+        ":lexicon_lib",
+        ":max_match_segmentation_lib",
+        ":pipeline_converter_lib",
+        ":single_stage_converter_lib",
+        ":test_utils_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Word-level candidate-enumeration API (GetAllConversions), used by input
+# methods to offer every plausible conversion of a single word.
+cc_library(
+    name = "conversion_candidates_lib",
+    srcs = ["ConversionCandidates.cpp"],
+    hdrs = ["ConversionCandidates.hpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":common_lib",
+        ":config_based_converter_lib",
+        ":conversion_lib",
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":dict_lib",
+        ":dict_entry_lib",
+    ],
+)
+
+cc_test(
+    name = "conversion_candidates_test",
+    size = "small",
+    srcs = ["ConversionCandidatesTest.cpp"],
+    deps = [
+        ":config_based_converter_lib",
+        ":conversion_candidates_lib",
+        ":conversion_lib",
+        ":conversion_chain_lib",
+        ":converter_lib",
+        ":lexicon_lib",
+        ":max_match_segmentation_lib",
+        ":pipeline_converter_lib",
+        ":single_stage_converter_lib",
+        ":test_utils_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "single_stage_converter_lib",
+    srcs = ["SingleStageConverter.cpp"],
+    hdrs = ["SingleStageConverter.hpp"],
+    deps = [
+        ":conversion_chain_lib",
+        ":conversion_inspection_lib",
+        ":converter_lib",
+        ":segments_lib",
+    ],
+)
+
+cc_library(
+    name = "pipeline_converter_lib",
+    srcs = ["PipelineConverter.cpp"],
+    hdrs = ["PipelineConverter.hpp"],
+    deps = [
+        ":conversion_inspection_lib",
+        ":converter_lib",
+    ],
+)
+
+cc_library(
+    name = "darts_dict_lib",
+    srcs = ["DartsDict.cpp"],
+    hdrs = ["DartsDict.hpp"],
+    deps = [
+        ":binary_dict_lib",
+        ":common_lib",
+        ":lexicon_lib",
+        ":serializable_dict_lib",
+        "@darts-clone",
+    ],
+)
+
+cc_test(
+    name = "darts_dict_test",
+    size = "small",
+    srcs = ["DartsDictTest.cpp"],
+    deps = [
+        ":darts_dict_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "dict_lib",
+    srcs = ["Dict.cpp"],
+    hdrs = ["Dict.hpp"],
+    deps = [
+        ":common_lib",
+        ":dict_entry_lib",
+    ],
+)
+
+cc_library(
+    name = "dict_converter_lib",
+    srcs = ["DictConverter.cpp"],
+    hdrs = ["DictConverter.hpp"],
+    deps = [
+        ":common_lib",
+        ":darts_dict_lib",
+        ":exception_lib",
+        ":lexicon_lib",
+        ":marisa_dict_lib",
+        ":text_dict_lib",
+        ":win_util_lib",
+    ],
+)
+
+cc_library(
+    name = "dict_entry_lib",
+    srcs = ["DictEntry.cpp"],
+    hdrs = ["DictEntry.hpp"],
+    deps = [
+        ":common_lib",
+        ":segments_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_library(
+    name = "dict_group_lib",
+    srcs = ["DictGroup.cpp"],
+    hdrs = ["DictGroup.hpp"],
+    deps = [
+        ":common_lib",
+        ":dict_lib",
+        ":lexicon_lib",
+        ":text_dict_lib",
+    ],
+)
+
+cc_test(
+    name = "dict_group_test",
+    size = "small",
+    srcs = ["DictGroupTest.cpp"],
+    deps = [
+        ":dict_group_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "dict_group_test_base_lib",
+    testonly = True,
+    hdrs = ["DictGroupTestBase.hpp"],
+    deps = [
+        ":dict_group_lib",
+        ":text_dict_test_base_lib",
+    ],
+)
+
+cc_library(
+    name = "exception_lib",
+    hdrs = ["Exception.hpp"],
+    deps = [":common_lib"],
+)
+
+cc_library(
+    name = "lexicon_lib",
+    srcs = ["Lexicon.cpp"],
+    hdrs = ["Lexicon.hpp"],
+    deps = [
+        ":common_lib",
+        ":dict_entry_lib",
+    ],
+)
+
+cc_test(
+    name = "lexicon_annotation_test",
+    size = "small",
+    srcs = ["LexiconAnnotationTest.cpp"],
+    deps = [
+        ":lexicon_lib",
+        ":serializable_dict_lib",
+        ":test_utils_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "marisa_dict_lib",
+    srcs = ["MarisaDict.cpp"],
+    hdrs = ["MarisaDict.hpp"],
+    deps = [
+        ":common_lib",
+        ":lexicon_lib",
+        ":serialized_values_lib",
+        "@marisa-trie",
+    ],
+)
+
+cc_test(
+    name = "marisa_dict_test",
+    size = "small",
+    srcs = ["MarisaDictTest.cpp"],
+    deps = [
+        ":marisa_dict_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "max_match_segmentation_lib",
+    srcs = ["MaxMatchSegmentation.cpp"],
+    hdrs = ["MaxMatchSegmentation.hpp"],
+    deps = [
+        ":common_lib",
+        ":dict_group_lib",
+        ":prefix_match_lib",
+        ":segmentation_lib",
+        ":segments_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_library(
+    name = "prefix_match_lib",
+    srcs = ["PrefixMatch.cpp"],
+    hdrs = [
+        "PrefixMatch.hpp",
+        "Utf8SkipScan.hpp",
+    ],
+    deps = [
+        ":common_lib",
+        ":dict_group_lib",
+        ":dict_lib",
+        ":lexicon_lib",
+        ":marisa_dict_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_test(
+    name = "prefix_match_test",
+    size = "small",
+    srcs = ["PrefixMatchTest.cpp"],
+    deps = [
+        ":prefix_match_lib",
+        ":dict_group_lib",
+        ":marisa_dict_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "max_match_segmentation_test",
+    size = "small",
+    srcs = ["MaxMatchSegmentationTest.cpp"],
+    deps = [
+        ":dict_group_test_base_lib",
+        ":max_match_segmentation_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "phrase_extract_lib",
+    srcs = ["PhraseExtract.cpp"],
+    hdrs = ["PhraseExtract.hpp"],
+    visibility = [
+        "//src:__pkg__",
+        "//src/tools:__pkg__",
+    ],
+    deps = [
+        ":common_lib",
+        ":marisa_dict_lib",
+        ":utf8_string_slice_lib",
+        "@marisa-trie",
+    ],
+)
+
+cc_library(
+    name = "plugin_api_lib",
+    hdrs = ["plugin/OpenCCPlugin.h"],
+)
+
+cc_library(
+    name = "plugin_segmentation_lib",
+    srcs = ["PluginSegmentation.cpp"],
+    hdrs = [
+        "PluginSegmentation.hpp",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": ["-ldl"],
+        "@platforms//os:osx": [],
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-ldl"],
+    }),
+    deps = [
+        ":common_lib",
+        ":exception_lib",
+        ":plugin_api_lib",
+        ":segmentation_lib",
+        ":segments_lib",
+        ":utf8_util_lib",
+        ":win_util_lib",
+    ],
+)
+
+cc_test(
+    name = "phrase_extract_test",
+    size = "small",
+    srcs = ["PhraseExtractTest.cpp"],
+    deps = [
+        ":phrase_extract_lib",
+        ":test_utils_lib",
+        ":test_utils_utf8_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+pybind_extension(
+    name = "opencc_clib",
+    srcs = ["py_opencc.cpp"],
+    deps = [":opencc_lib"],
+)
+
+py_library(
+    name = "py_opencc",
+    data = select({
+        "@platforms//os:windows": ["//src/pyd:opencc_clib_pyd_copy"],
+        "//conditions:default": [":opencc_clib"],
+    }),
+    imports = select({
+        "@platforms//os:windows": ["pyd"],
+        "//conditions:default": ["."],
+    }),
+)
+
+cc_library(
+    name = "segmentation_lib",
+    srcs = ["Segmentation.cpp"],
+    hdrs = ["Segmentation.hpp"],
+    deps = [":common_lib"],
+)
+
+cc_library(
+    name = "segments_lib",
+    hdrs = ["Segments.hpp"],
+    deps = [":common_lib"],
+)
+
+cc_library(
+    name = "serializable_dict_lib",
+    srcs = ["SerializableDict.cpp"],
+    hdrs = ["SerializableDict.hpp"],
+    deps = [
+        ":dict_lib",
+        ":win_util_lib",
+    ],
+)
+
+cc_library(
+    name = "serialized_values_lib",
+    srcs = ["SerializedValues.cpp"],
+    hdrs = ["SerializedValues.hpp"],
+    deps = [
+        ":common_lib",
+        ":lexicon_lib",
+        ":serializable_dict_lib",
+    ],
+)
+
+cc_test(
+    name = "serialized_values_test",
+    size = "small",
+    srcs = ["SerializedValuesTest.cpp"],
+    deps = [
+        ":serialized_values_lib",
+        ":text_dict_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "simple_converter_lib",
+    srcs = ["SimpleConverter.cpp"],
+    hdrs = [
+        "ConversionInspection.hpp",
+        "SimpleConverter.hpp",
+        "opencc.h",
+    ],
+    defines = ["BAZEL"],
+    deps = [
+        ":common_lib",
+        ":config_lib",
+        ":converter_lib",
+        ":resource_provider_lib",
+        ":utf8_util_lib",
+        "@bazel_tools//tools/cpp/runfiles",
+    ],
+)
+
+cc_test(
+    name = "simple_converter_test",
+    size = "small",
+    srcs = ["SimpleConverterTest.cpp"],
+    deps = [
+        ":config_test_base_lib",
+        ":simple_converter_lib",
+        ":test_utils_utf8_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "test_utils_lib",
+    testonly = True,
+    hdrs = ["TestUtils.hpp"],
+    deps = [
+        "@googletest//:gtest",
+    ],
+)
+
+cc_library(
+    name = "test_utils_utf8_lib",
+    testonly = True,
+    srcs = ["TestUtilsUTF8.hpp"],
+)
+
+cc_library(
+    name = "text_dict_lib",
+    srcs = ["TextDict.cpp"],
+    hdrs = ["TextDict.hpp"],
+    deps = [
+        ":common_lib",
+        ":lexicon_lib",
+        ":serializable_dict_lib",
+    ],
+)
+
+cc_test(
+    name = "text_dict_test",
+    size = "small",
+    srcs = ["TextDictTest.cpp"],
+    deps = [
+        ":test_utils_utf8_lib",
+        ":text_dict_lib",
+        ":text_dict_test_base_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "text_dict_test_base_lib",
+    testonly = True,
+    srcs = ["TextDictTestBase.hpp"],
+    deps = [
+        ":lexicon_lib",
+        ":test_utils_lib",
+        ":test_utils_utf8_lib",
+        ":text_dict_lib",
+    ],
+)
+
+cc_library(
+    name = "utf8_string_slice_lib",
+    srcs = ["UTF8StringSlice.cpp"],
+    hdrs = ["UTF8StringSlice.hpp"],
+    deps = [
+        ":common_lib",
+        ":utf8_util_lib",
+    ],
+)
+
+cc_test(
+    name = "utf8_string_slice_test",
+    size = "small",
+    srcs = ["UTF8StringSliceTest.cpp"],
+    deps = [
+        ":test_utils_lib",
+        ":utf8_string_slice_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "utf8_util_lib",
+    srcs = ["UTF8Util.cpp"],
+    hdrs = ["UTF8Util.hpp"],
+    deps = [
+        ":common_lib",
+        ":exception_lib",
+    ],
+)
+
+cc_test(
+    name = "utf8_util_test",
+    size = "small",
+    srcs = ["UTF8UtilTest.cpp"],
+    deps = [
+        ":test_utils_lib",
+        ":utf8_util_lib",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "win_util_lib",
+    hdrs = ["WinUtil.hpp"],
+)

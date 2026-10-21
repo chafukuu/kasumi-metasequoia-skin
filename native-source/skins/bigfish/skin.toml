@@ -1,0 +1,78 @@
+# 蓝色大肥鱼：鲸鱼女仆装饰图 + 气泡波纹背景，配色取自角色的深蓝发色、藏青裙摆、浅蓝蝴蝶结和金色刺绣。
+# 所有图片路径都相对于本皮肤目录。
+schema_version = 1
+id = "bigfish"
+name = "蓝色大肥鱼"
+version = "1.0.0"
+author = "Metasequoia IME contributors"
+description = "鲸鱼女仆大肥鱼：卡片右上方的角色装饰、海底气泡背景、深海蓝配色与金色序号。"
+base = "fluent"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 176
+corner_radius_dip = 12
+
+[candidate_window.decoration]
+image = "assets/character.png"
+top_inset_dip = 104
+width_dip = 96         # 与 384×416 的原图比例一致
+align = "right"
+
+# 大部分透明的气泡 + 波纹纹理，深浅主题共用。
+[candidate_window.background]
+image = "assets/background.png"
+fit = "cover"
+opacity = 0.35
+
+[candidate.dark]
+accent = "#5B9BFF"
+selected = "rgba(74, 144, 226, 0.32)"
+hover = "rgba(74, 144, 226, 0.18)"
+surface = "#141B33"
+border = "rgba(91, 155, 255, 0.38)"
+text = "#E3EAFF"
+number = "#E0C07A"
+translation = "#529E72"
+translation_pos = "#529CCA80"
+translation_separator = "#529E7273"
+selected_translation = "#7FB797"
+selected_translation_pos = "#529CCA80"
+selected_translation_separator = "#7FB79773"
+
+[candidate.light]
+accent = "#2F5BD3"
+selected = "rgba(47, 91, 211, 0.16)"
+hover = "rgba(47, 91, 211, 0.09)"
+surface = "#F4F8FF"
+border = "rgba(42, 53, 112, 0.24)"
+text = "#1C2550"
+number = "#A67C2E"
+translation = "#448361"
+translation_pos = "#0B6E9980"
+translation_separator = "#44836173"
+selected_translation = "#386D51"
+selected_translation_pos = "#0B6E9980"
+selected_translation_separator = "#386D5173"
+
+[toolbar]
+corner_radius_dip = 8
+
+[toolbar.dark]
+background = "#141B33"
+border = "rgba(91, 155, 255, 0.38)"
+handle = "#5B9BFF"
+divider = "rgba(91, 155, 255, 0.28)"
+icon = "#E3EAFF"
+hover = "rgba(74, 144, 226, 0.22)"
+
+[toolbar.light]
+background = "#F4F8FF"
+border = "rgba(42, 53, 112, 0.24)"
+handle = "#2F5BD3"
+divider = "rgba(42, 53, 112, 0.20)"
+icon = "#1C2550"
+hover = "rgba(47, 91, 211, 0.12)"

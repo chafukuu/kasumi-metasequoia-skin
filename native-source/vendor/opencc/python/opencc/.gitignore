@@ -1,0 +1,4 @@
+version.py
+clib/*
+!clib/__init__.py
+!clib/BUILD.bazel

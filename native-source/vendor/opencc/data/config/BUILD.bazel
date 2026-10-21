@@ -1,0 +1,92 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+CONFIGS = glob(
+    ["*.json"],
+    exclude = ["*.schema.json"],
+)
+
+# Bazel 10 no longer lets source files inherit package default_visibility, so
+# export the config JSONs explicitly (e.g. //data/dictionary references t2s.json).
+exports_files(
+    CONFIGS,
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "config",
+    srcs = CONFIGS,
+)
+
+filegroup(
+    name = "config_schema",
+    srcs = ["opencc_config.schema.json"],
+)
+
+filegroup(
+    name = "config_schema_validation_test_src",
+    srcs = ["ConfigSchemaValidationTest.cpp"],
+)
+
+[
+    cc_test(
+        name = "config_dict_validation_" + config[:-5],
+        size = "small",
+        srcs = ["ConfigDictValidationTest.cpp"],
+        local_defines = [
+            "BAZEL",
+            "OPENCC_CONFIG_DICT_TEST_FILE=\\\"" + config + "\\\"",
+        ],
+        data = [
+            config,
+            "//data/dictionary:binary_dictionaries",
+            "//test/testcases",
+        ],
+        deps = [
+            "//src:simple_converter_lib",
+            "@bazel_tools//tools/cpp/runfiles",
+            "@googletest//:gtest_main",
+            "@rapidjson//:rapidjson",
+        ],
+    )
+    for config in CONFIGS
+]
+
+test_suite(
+    name = "config_dict_validation_test",
+    tests = [
+        ":config_dict_validation_" + config[:-5]
+        for config in CONFIGS
+    ],
+)
+
+[
+    cc_test(
+        name = "config_schema_validation_" + config[:-5],
+        size = "small",
+        srcs = ["ConfigSchemaValidationTest.cpp"],
+        local_defines = [
+            "BAZEL",
+            "OPENCC_CONFIG_SCHEMA_TEST_FILE=\\\"data/config/" + config + "\\\"",
+        ],
+        data = [
+            config,
+            ":config_schema",
+        ],
+        deps = [
+            "@bazel_tools//tools/cpp/runfiles",
+            "@googletest//:gtest_main",
+            "@rapidjson//:rapidjson",
+        ],
+    )
+    for config in CONFIGS
+]
+
+test_suite(
+    name = "config_schema_validation_test",
+    tests = [
+        ":config_schema_validation_" + config[:-5]
+        for config in CONFIGS
+    ],
+)

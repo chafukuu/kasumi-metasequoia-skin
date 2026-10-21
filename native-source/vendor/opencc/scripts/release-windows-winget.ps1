@@ -1,0 +1,346 @@
+param(
+    [string]$Version = "",
+    [string]$Arch = "x64",
+    [string]$BuildDir = "build\winget-$Arch",
+    [string]$OutputDir = "dist\winget-$Arch",
+    [string]$GitHubRepository = "BYVoid/OpenCC",
+    [string]$PackageIdentifier = "BYVoid.OpenCC",
+    [string]$Publisher = "BYVoid",
+    [switch]$PrepareOnly,
+    [switch]$PackageOnly,
+    [switch]$SkipTests
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Get-ProjectVersion {
+    $packageJsonFile = Join-Path $PSScriptRoot "..\package.json"
+    if (Test-Path $packageJsonFile) {
+        $packageJson = Get-Content -Path $packageJsonFile -Raw | ConvertFrom-Json
+        if ($packageJson.version) {
+            return [string]$packageJson.version
+        }
+    }
+
+    $gitVersionFile = Join-Path $PSScriptRoot "..\cmake\GitVersion.cmake"
+    $content = Get-Content -Path $gitVersionFile -Raw
+
+    $major = [regex]::Match($content, '_OPENCC_FALLBACK_MAJOR\s+(\d+)').Groups[1].Value
+    $minor = [regex]::Match($content, '_OPENCC_FALLBACK_MINOR\s+(\d+)').Groups[1].Value
+    $revision = [regex]::Match($content, '_OPENCC_FALLBACK_REVISION\s+(\d+)').Groups[1].Value
+
+    if (-not $major -or -not $minor -or -not $revision) {
+        throw "Failed to parse version from package.json or cmake/GitVersion.cmake."
+    }
+
+    return "$major.$minor.$revision"
+}
+
+function Write-Utf8File {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+
+    $directory = Split-Path -Parent $Path
+    if ($directory) {
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    }
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @()
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $FilePath @Arguments
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        throw "$FilePath exited with code $exitCode."
+    }
+}
+
+function Normalize-ReleaseVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$RawVersion
+    )
+
+    $value = $RawVersion.Trim()
+    if ($value.StartsWith("ver.")) {
+        $value = $value.Substring(4)
+    } elseif ($value.StartsWith("v")) {
+        $value = $value.Substring(1)
+    }
+
+    if ($value -notmatch '^\d+\.\d+\.\d+(-(alpha|rc|next)\d+)?$') {
+        throw "Invalid version '$RawVersion'. Expected x.y.z, x.y.z-alphaN, x.y.z-rcN, or x.y.z-nextN."
+    }
+
+    return $value
+}
+
+function Normalize-GitHubRepository {
+    param(
+        [Parameter(Mandatory = $true)][string]$RawRepository
+    )
+
+    $value = $RawRepository.Trim()
+    if ($value -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+        throw "Invalid GitHub repository '$RawRepository'. Expected owner/name."
+    }
+    return $value
+}
+
+function Normalize-BaseUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$RawUrl
+    )
+
+    $value = $RawUrl.Trim().TrimEnd('/')
+    if ($value -notmatch '^https://') {
+        throw "Invalid public base URL '$RawUrl'. Expected an https URL."
+    }
+    return $value
+}
+
+function New-WinGetManifests {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageVersion,
+        [Parameter(Mandatory = $true)][string]$PackageUrl,
+        [Parameter(Mandatory = $true)][string]$InstallerSha256,
+        [Parameter(Mandatory = $true)][string]$ManifestRoot,
+        [Parameter(Mandatory = $true)][string]$PackageIdentifier,
+        [Parameter(Mandatory = $true)][string]$Publisher,
+        [Parameter(Mandatory = $true)][string]$PublisherUrl,
+        [Parameter(Mandatory = $true)][string]$PublisherSupportUrl,
+        [Parameter(Mandatory = $true)][string]$PackagePageUrl,
+        [Parameter(Mandatory = $true)][string]$LicenseUrl
+    )
+    $releaseDate = Get-Date -Format "yyyy-MM-dd"
+
+    $versionManifest = @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.9.0.schema.json
+PackageIdentifier: $packageIdentifier
+PackageVersion: $PackageVersion
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.9.0
+"@
+
+    $installerManifest = @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
+PackageIdentifier: $packageIdentifier
+PackageVersion: $PackageVersion
+InstallerType: zip
+NestedInstallerType: portable
+ReleaseDate: $releaseDate
+Installers:
+- Architecture: x64
+  InstallerUrl: $PackageUrl
+  InstallerSha256: $InstallerSha256
+  NestedInstallerFiles:
+  - RelativeFilePath: bin/opencc.exe
+    PortableCommandAlias: opencc
+  - RelativeFilePath: bin/opencc_dict.exe
+    PortableCommandAlias: opencc_dict
+  - RelativeFilePath: bin/opencc_phrase_extract.exe
+    PortableCommandAlias: opencc_phrase_extract
+ManifestType: installer
+ManifestVersion: 1.9.0
+"@
+
+    $localeManifest = @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: $packageIdentifier
+PackageVersion: $PackageVersion
+PackageLocale: en-US
+Publisher: $Publisher
+PublisherUrl: $PublisherUrl
+PublisherSupportUrl: $PublisherSupportUrl
+Author: Carbo Kuo and OpenCC contributors
+PackageName: OpenCC
+PackageUrl: $PackagePageUrl
+License: Apache-2.0
+LicenseUrl: $LicenseUrl
+ShortDescription: Open Chinese Convert
+Description: Command-line tools and libraries for Simplified Chinese, Traditional Chinese, regional variant, and Japanese Kanji conversion.
+Moniker: opencc
+Tags:
+- chinese
+- conversion
+- opencc
+- simplified-chinese
+- traditional-chinese
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0
+"@
+
+    Write-Utf8File -Path (Join-Path $ManifestRoot "BYVoid.OpenCC.yaml") -Content $versionManifest
+    Write-Utf8File -Path (Join-Path $ManifestRoot "BYVoid.OpenCC.installer.yaml") -Content $installerManifest
+    Write-Utf8File -Path (Join-Path $ManifestRoot "BYVoid.OpenCC.locale.en-US.yaml") -Content $localeManifest
+}
+
+function New-PortableStaging {
+    param(
+        [Parameter(Mandatory = $true)][string]$BuildDir,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$StagingRoot,
+        [Parameter(Mandatory = $true)][bool]$SkipTests
+    )
+
+    Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $InstallRoot -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $StagingRoot -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path $StagingRoot | Out-Null
+
+    Invoke-Native cmake @(
+        "-S", ".",
+        "-B", $BuildDir,
+        "-A", "x64",
+        "-DBUILD_SHARED_LIBS:BOOL=OFF",
+        "-DBUILD_OPENCC_JIEBA_PLUGIN:BOOL=ON",
+        "-DCMAKE_INSTALL_PREFIX:PATH=$InstallRoot",
+        "-DENABLE_GTEST:BOOL=OFF",
+        "-DENABLE_BENCHMARK:BOOL=OFF"
+    )
+
+    Invoke-Native cmake @("--build", $BuildDir, "--config", "Release", "--target", "install")
+
+    if (-not $SkipTests) {
+        Invoke-Native ctest @("--test-dir", $BuildDir, "--build-config", "Release", "--output-on-failure")
+    }
+
+    New-Item -ItemType Directory -Force -Path (Join-Path $StagingRoot "bin") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $StagingRoot "bin\plugins") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $StagingRoot "share\opencc") | Out-Null
+
+    Copy-Item -Path (Join-Path $InstallRoot "bin\opencc.exe") -Destination (Join-Path $StagingRoot "bin\opencc.exe")
+    Copy-Item -Path (Join-Path $InstallRoot "bin\opencc_dict.exe") -Destination (Join-Path $StagingRoot "bin\opencc_dict.exe")
+    Copy-Item -Path (Join-Path $InstallRoot "bin\opencc_phrase_extract.exe") -Destination (Join-Path $StagingRoot "bin\opencc_phrase_extract.exe")
+    Copy-Item -Path (Join-Path $InstallRoot "bin\plugins\*.dll") -Destination (Join-Path $StagingRoot "bin\plugins")
+    Copy-Item -Path (Join-Path $InstallRoot "share\opencc\*") -Destination (Join-Path $StagingRoot "share\opencc") -Recurse
+    Copy-Item -Path LICENSE -Destination (Join-Path $StagingRoot "LICENSE.txt")
+    Copy-Item -Path README.md -Destination (Join-Path $StagingRoot "README.md")
+}
+
+function New-PortableArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$StagingRoot,
+        [Parameter(Mandatory = $true)][string]$AssetPath,
+        [Parameter(Mandatory = $true)][string]$ChecksumPath,
+        [Parameter(Mandatory = $true)][string]$AssetName
+    )
+
+    if (-not (Test-Path $StagingRoot)) {
+        throw "Missing portable staging directory: $StagingRoot"
+    }
+
+    Remove-Item -Force $AssetPath -ErrorAction SilentlyContinue
+    Remove-Item -Force $ChecksumPath -ErrorAction SilentlyContinue
+
+    Compress-Archive -Path (Join-Path $StagingRoot '*') -DestinationPath $AssetPath -CompressionLevel Optimal
+
+    $hash = (Get-FileHash -Path $AssetPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    Write-Utf8File -Path $ChecksumPath -Content "$hash *$AssetName`n"
+    return $hash
+}
+
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+Push-Location $repoRoot
+
+try {
+    if ($PrepareOnly -and $PackageOnly) {
+        throw "Use at most one of -PrepareOnly and -PackageOnly."
+    }
+
+    $publicBaseUrl = "https://opencc.byvoid.com/opencc-winget-release"
+
+    if (-not $Version) {
+        $Version = Get-ProjectVersion
+    }
+
+    $Version = Normalize-ReleaseVersion -RawVersion $Version
+    $GitHubRepository = Normalize-GitHubRepository -RawRepository $GitHubRepository
+
+    if ($Arch -ne "x64") {
+        throw "This script currently supports only -Arch x64 for WinGet releases."
+    }
+
+    $packageRoot = "https://github.com/$GitHubRepository"
+    $releaseUrlBase = Normalize-BaseUrl -RawUrl $publicBaseUrl
+    $licenseUrl = "$packageRoot/blob/master/LICENSE"
+    $publisherSupportUrl = "$packageRoot/issues"
+
+    $resolvedBuildDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $BuildDir))
+    $resolvedOutputDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutputDir))
+    $installRoot = Join-Path $resolvedOutputDir "install"
+    $stagingRoot = Join-Path $resolvedOutputDir "staging"
+    $assetName = "OpenCC-$Version-windows-$Arch-portable.zip"
+    $assetPath = Join-Path $resolvedOutputDir $assetName
+    $checksumPath = "$assetPath.sha256"
+    $wingetPathIdentifier = $PackageIdentifier.Replace('.', '\')
+    $wingetRoot = Join-Path $resolvedOutputDir "winget-manifests\$wingetPathIdentifier\$Version"
+    $releaseUrl = "$releaseUrlBase/$assetName"
+
+    if (-not $PackageOnly) {
+        if (Test-Path $resolvedOutputDir) {
+            Get-ChildItem -Path $resolvedOutputDir -Force |
+                Where-Object { $_.FullName -ne $stagingRoot } |
+                Remove-Item -Recurse -Force
+        } else {
+            New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
+        }
+
+        New-PortableStaging `
+            -BuildDir $resolvedBuildDir `
+            -InstallRoot $installRoot `
+            -StagingRoot $stagingRoot `
+            -SkipTests ([bool]$SkipTests)
+
+        Write-Host "Portable staging: $stagingRoot"
+    }
+
+    if ($PrepareOnly) {
+        return
+    }
+
+    $hash = New-PortableArchive `
+        -StagingRoot $stagingRoot `
+        -AssetPath $assetPath `
+        -ChecksumPath $checksumPath `
+        -AssetName $assetName
+
+    New-WinGetManifests `
+        -PackageVersion $Version `
+        -PackageUrl $releaseUrl `
+        -InstallerSha256 $hash `
+        -ManifestRoot $wingetRoot `
+        -PackageIdentifier $PackageIdentifier `
+        -Publisher $Publisher `
+        -PublisherUrl $packageRoot `
+        -PublisherSupportUrl $publisherSupportUrl `
+        -PackagePageUrl $packageRoot `
+        -LicenseUrl $licenseUrl
+
+    Write-Host "Release archive: $assetPath"
+    Write-Host "SHA256: $hash"
+    Write-Host "WinGet manifests: $wingetRoot"
+}
+finally {
+    Pop-Location
+}

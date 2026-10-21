@@ -1,0 +1,283 @@
+name: Resource Diff
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "Pull request number to compare. Enables manual maintainer-approved diff for fork PRs."
+        required: false
+        type: string
+      before_ref:
+        description: "Base ref/SHA to compare from. Defaults to the PR base or master."
+        required: false
+        type: string
+      after_ref:
+        description: "Head ref/SHA to compare. Defaults to the PR head or current ref."
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diff:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve refs
+        id: refs
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PULL_REQUEST: ${{ inputs.pull_request }}
+          INPUT_BEFORE_REF: ${{ inputs.before_ref }}
+          INPUT_AFTER_REF: ${{ inputs.after_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_REPO_URL: ${{ github.event.pull_request.head.repo.clone_url }}
+          GITHUB_SHA_VALUE: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          pr_number=""
+          pr_head_repo=""
+          pr_head_repo_url=""
+          manual_pr=0
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_PULL_REQUEST" ]; then
+            pr_number="$INPUT_PULL_REQUEST"
+            before_ref="${INPUT_BEFORE_REF:-$(gh api "repos/${REPOSITORY}/pulls/${pr_number}" --jq '.base.sha')}"
+            after_ref="${INPUT_AFTER_REF:-$(gh api "repos/${REPOSITORY}/pulls/${pr_number}" --jq '.head.sha')}"
+            pr_head_repo="$(gh api "repos/${REPOSITORY}/pulls/${pr_number}" --jq '.head.repo.full_name')"
+            pr_head_repo_url="$(gh api "repos/${REPOSITORY}/pulls/${pr_number}" --jq '.head.repo.clone_url')"
+            manual_pr=1
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            before_ref="${INPUT_BEFORE_REF:-$PR_BASE_SHA}"
+            after_ref="${INPUT_AFTER_REF:-$PR_HEAD_SHA}"
+            pr_head_repo="$PR_HEAD_REPO"
+            pr_head_repo_url="$PR_HEAD_REPO_URL"
+          else
+            before_ref="${INPUT_BEFORE_REF:-master}"
+            after_ref="${INPUT_AFTER_REF:-$GITHUB_SHA_VALUE}"
+            pr_head_repo="$REPOSITORY"
+          fi
+
+          echo "before_ref=$before_ref" >> "$GITHUB_OUTPUT"
+          echo "after_ref=$after_ref" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "pr_head_repo=$pr_head_repo" >> "$GITHUB_OUTPUT"
+          echo "pr_head_repo_url=$pr_head_repo_url" >> "$GITHUB_OUTPUT"
+          echo "manual_pr=$manual_pr" >> "$GITHUB_OUTPUT"
+          echo "Before: $before_ref"
+          echo "After: $after_ref"
+          if [ -n "$pr_number" ]; then
+            echo "Pull request: #$pr_number"
+          fi
+          if [ -n "$pr_head_repo" ]; then
+            echo "PR head repository: $pr_head_repo"
+          fi
+
+      - name: Check resource diff safety
+        id: safety
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REPO: ${{ steps.refs.outputs.pr_head_repo }}
+          MANUAL_PR: ${{ steps.refs.outputs.manual_pr }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          enabled=1
+          use_buildbuddy=1
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$PR_HEAD_REPO" != "$REPOSITORY" ]; then
+            enabled=0
+          fi
+          if [ "$PR_HEAD_REPO" != "$REPOSITORY" ]; then
+            use_buildbuddy=0
+          fi
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "use_buildbuddy=$use_buildbuddy" >> "$GITHUB_OUTPUT"
+
+          if [ "$enabled" = "0" ]; then
+            {
+              echo "## Resource Diff Skipped"
+              echo
+              echo "Resource diff is skipped for fork pull requests because building"
+              echo "the resource zip executes repository Bazel/Python code from the PR."
+              echo
+              echo "- Repository: \`${REPOSITORY}\`"
+              echo "- PR head repository: \`${PR_HEAD_REPO}\`"
+              echo "- Before ref: \`${{ steps.refs.outputs.before_ref }}\`"
+              echo "- After ref: \`${{ steps.refs.outputs.after_ref }}\`"
+              echo
+              echo "A maintainer can run this workflow manually with the PR number after review."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$enabled" = "1" ] && [ "$MANUAL_PR" = "1" ]; then
+            {
+              echo "## Resource Diff Manually Approved"
+              echo
+              echo "This workflow was manually triggered for PR #${{ steps.refs.outputs.pr_number }}."
+              echo "- PR head repository: \`${PR_HEAD_REPO}\`"
+              echo "- BuildBuddy enabled: \`${use_buildbuddy}\`"
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Checkout repository
+        if: steps.safety.outputs.enabled == '1'
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Create comparison worktrees
+        if: steps.safety.outputs.enabled == '1'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REPO_URL: ${{ steps.refs.outputs.pr_head_repo_url }}
+        run: |
+          before_ref="${{ steps.refs.outputs.before_ref }}"
+          after_ref="${{ steps.refs.outputs.after_ref }}"
+
+          git fetch --no-tags origin "${before_ref}:refs/resource-diff/before"
+          if [ -n "$PR_HEAD_REPO_URL" ]; then
+            git fetch --no-tags "$PR_HEAD_REPO_URL" "${after_ref}:refs/resource-diff/after"
+          else
+            git fetch --no-tags origin "${after_ref}:refs/resource-diff/after"
+          fi
+
+          git worktree add "$RUNNER_TEMP/opencc-before" refs/resource-diff/before
+          git worktree add "$RUNNER_TEMP/opencc-after" refs/resource-diff/after
+
+      - name: Verify checked out refs
+        if: steps.safety.outputs.enabled == '1'
+        shell: bash
+        run: |
+          before_head="$(git -C "$RUNNER_TEMP/opencc-before" rev-parse HEAD)"
+          after_head="$(git -C "$RUNNER_TEMP/opencc-after" rev-parse HEAD)"
+          {
+            echo "## Checked Out Refs"
+            echo
+            echo "- Expected before: \`${{ steps.refs.outputs.before_ref }}\`"
+            echo "- Actual before: \`${before_head}\`"
+            echo "- Expected after: \`${{ steps.refs.outputs.after_ref }}\`"
+            echo "- Actual after: \`${after_head}\`"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          test "$before_head" = "${{ steps.refs.outputs.before_ref }}"
+          test "$after_head" = "${{ steps.refs.outputs.after_ref }}"
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        if: steps.safety.outputs.enabled == '1'
+        with:
+          bazelisk-cache: true
+
+      - name: Set up Python
+        if: steps.safety.outputs.enabled == '1'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Configure BuildBuddy
+        if: steps.safety.outputs.enabled == '1' && steps.safety.outputs.use_buildbuddy == '1'
+        shell: bash
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "${BUILDBUDDY_API_KEY}" ]; then
+            {
+              echo "build --config=buildbuddy"
+              echo "build --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+              echo "build --bes_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+            } >> "$RUNNER_TEMP/opencc-before/.bazelrc.user"
+            echo "BuildBuddy enabled for before worktree."
+          else
+            echo "BUILDBUDDY_API_KEY not set; skipping BuildBuddy config."
+          fi
+
+      - name: Build before resource zip
+        if: steps.safety.outputs.enabled == '1'
+        shell: bash
+        working-directory: ${{ runner.temp }}/opencc-before
+        env:
+          MSYS_NO_PATHCONV: 1
+        run: |
+          args=()
+          if [ -x ./scripts/bazel-workspace-status.sh ]; then
+            args+=(--workspace_status_command=./scripts/bazel-workspace-status.sh)
+          fi
+          bazel build "${args[@]}" //data:opencc_resources_zip
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp -f bazel-bin/data/opencc-resources.zip "$GITHUB_WORKSPACE/dist/opencc-resources-before.zip"
+
+      - name: Build after resource zip
+        if: steps.safety.outputs.enabled == '1'
+        shell: bash
+        working-directory: ${{ runner.temp }}/opencc-after
+        env:
+          MSYS_NO_PATHCONV: 1
+        run: |
+          args=()
+          if [ -x ./scripts/bazel-workspace-status.sh ]; then
+            args+=(--workspace_status_command=./scripts/bazel-workspace-status.sh)
+          fi
+          bazel build "${args[@]}" //data:opencc_resources_zip
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp -f bazel-bin/data/opencc-resources.zip "$GITHUB_WORKSPACE/dist/opencc-resources-after.zip"
+
+      - name: Capture resource zip metadata
+        if: steps.safety.outputs.enabled == '1'
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import hashlib
+          import json
+          import zipfile
+
+          print("## Resource Zip Metadata")
+          print()
+          for label, path in [
+              ("Before", "dist/opencc-resources-before.zip"),
+              ("After", "dist/opencc-resources-after.zip"),
+          ]:
+              data = open(path, "rb").read()
+              with zipfile.ZipFile(path) as archive:
+                  manifest_data = archive.read("opencc-resource-manifest.json")
+              manifest = json.loads(manifest_data)
+              print(f"- {label} zip SHA256: `{hashlib.sha256(data).hexdigest()}`")
+              print(
+                  f"- {label} manifest SHA256: "
+                  f"`{hashlib.sha256(manifest_data).hexdigest()}`"
+              )
+              print(f"- {label} manifest commit: `{manifest.get('commit_id')}`")
+              print(f"- {label} manifest built: `{manifest.get('build_time_utc')}`")
+          print()
+          PY
+
+      - name: Generate diff report
+        if: steps.safety.outputs.enabled == '1'
+        shell: bash
+        run: |
+          mkdir -p dist
+          python3 "$RUNNER_TEMP/opencc-before/data/scripts/opencc_resources_zip_diff.py" \
+            dist/opencc-resources-before.zip \
+            dist/opencc-resources-after.zip \
+            --markdown dist/opencc-resource-diff.md
+          cat dist/opencc-resource-diff.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diff report
+        if: steps.safety.outputs.enabled == '1'
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/opencc-resource-diff.md
+          archive: false
+          if-no-files-found: error

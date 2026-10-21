@@ -1,0 +1,75 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "platform_io_lib",
+    srcs = ["PlatformIO.cpp"],
+    hdrs = ["PlatformIO.hpp"],
+    deps = [
+        "//src:win_util_lib",
+    ],
+)
+
+cc_library(
+    name = "command_line_main_lib",
+    srcs = ["CommandLineMain.cpp"],
+    hdrs = ["CommandLineMain.hpp"],
+    deps = [
+        ":platform_io_lib",
+        "//src:cmd_line_output_lib",
+        "//src:config_lib",
+        "//src:conversion_ambiguities_lib",
+        "//src:conversion_inspection_lib",
+        "//src:converter_lib",
+        "//src:exception_lib",
+        "//src:segments_lib",
+        "@rapidjson//:rapidjson",
+    ],
+)
+
+cc_binary(
+    name = "command_line",
+    srcs = ["CommandLine.cpp"],
+    deps = [
+        ":command_line_main_lib",
+        ":platform_io_lib",
+        "//src:cmd_line_output_lib",
+        "//src:config_lib",
+        "//src:converter_lib",
+        "//src:utf8_util_lib",
+    ],
+    linkopts = select({
+        "@platforms//os:windows": ["Shell32.lib"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_binary(
+    name = "dict_converter",
+    srcs = ["DictConverter.cpp"],
+    deps = [
+        "//src:cmd_line_output_lib",
+        "//src:dict_converter_lib",
+        "//src:exception_lib",
+    ],
+)
+
+cc_binary(
+    name = "phrase_extract",
+    srcs = ["PhraseExtract.cpp"],
+    deps = [
+        "//src:cmd_line_output_lib",
+        "//src:phrase_extract_lib",
+    ],
+)
+
+cc_binary(
+    name = "speed_benchmark",
+    srcs = ["SpeedBenchmark.cpp"],
+    deps = [
+        "//src:resource_provider_lib",
+        "//src:simple_converter_lib",
+        "//src:utf8_util_lib",
+    ],
+)

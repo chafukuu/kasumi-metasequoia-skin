@@ -1,0 +1,104 @@
+# OpenCC Project Overview
+
+This document compiles the Open Chinese Convert (OpenCC) project information to help quickly familiarize with the code structure, data organization, and accompanying tools.
+
+## Project Overview
+- OpenCC is an open-source Chinese Simplified-Traditional and regional variant conversion tool, supporting Simplified↔Traditional, Hong Kong/Macau/Taiwan regional differences, Japanese Shinjitai/Kyujitai character forms, and other conversion schemes.
+- The project provides a C++ core library, C language interface, command-line tools, as well as Python, Node.js and other language bindings. The dictionary and program are decoupled for easy customization and extension.
+- Main dependencies: `rapidjson` for configuration parsing, `marisa-trie` for high-performance dictionaries (`.ocd2`), optional `Darts` for legacy `.ocd` support, and optional `cppjieba` resources for the experimental `opencc-jieba` segmentation plugin.
+
+## Data and Configuration
+- Dictionaries are maintained in `data/dictionary/*.txt`, covering phrases, characters, regional differences, Japanese new characters, and other topic files; converted to `.ocd2` during build for acceleration.
+- Default configurations are located in `data/config/`, such as `s2t.json`, `t2s.json`, `s2tw.json`, etc., defining segmenter types, dictionaries used, and combination methods.
+- `SealCharacters.txt` (Unicode 18.0 Seal block → modern CJK equivalent) is derived from the UCD `SealSources.txt` `kSEAL_MCJK` property (the generator is not checked in); keep it in line with the UCD data and list any deviation in the file header. `kSEAL_MCJK` values are strict 說文 transcriptions (隸定字, e.g. `秊`, `歬`, `𡭔`), so `SealVariants.txt` maps modern standard characters (and their regional variants) to those forms (`年 -> 秊`); only same-character variant forms belong there, not 本字/假借 substitutions. Both reverses (`SealCharactersRev`, `SealVariantsRev`) are produced at build time like `TWVariantsRev`. Chains: `t2seal` = `SealVariants -> SealCharactersRev`, `seal2t` = `SealCharacters -> SealVariantsRev`; a self-mapping plus `@reverse-prefer` in `SealVariants.txt` keeps a 隸定字 that is itself standard (e.g. `裏`, `爲`) unchanged in `seal2t`.
+- Jieba-backed plugin configurations live under `plugins/jieba/data/config/`, such as `s2twp_jieba.json`; they are packaged only when the optional `opencc-jieba` plugin is built or distributed.
+- `data/scheme` and `data/scripts` provide dictionary compilation scripts and specification validation tools.
+
+### Dictionary Placement Rules
+- Put regional vocabulary differences, such as Mainland-to-Taiwan term choices and place-name translations, in `TWPhrases.txt` / `TWPhrasesRev.txt`, not in `TWVariantsPhrases.txt`. Example: US state or territory names like `特拉華 -> 德拉瓦`, `新澤西 -> 紐澤西`, and `美屬維爾京羣島 -> 美屬維京群島` belong in `TWPhrases.txt`.
+- Reserve `TWVariantsPhrases.txt` for phrase-level exceptions to Taiwan variant character conversion, especially when a phrase must override character-level mappings from `TWVariants.txt`. It is part of `s2tw`, `s2twp`, and `t2tw`; using it for vocabulary translations will incorrectly affect `s2tw`.
+- For `s2twp` and `s2hkp`, remember the conversion chain is `STPhrases/STCharacters -> regional phrases -> regional variants`. The generated `STPhrases_GeneratedFromRegionalPhrases` dictionary derives Simplified-to-regional-key entries from the first column of `TWPhrases.txt` and `HKPhrases.txt`; standard Simplified-to-Traditional configs use it in both mmseg segmentation and the first ST conversion stage so whole regional keys do not get stranded in Simplified form. Add manual `STPhrases.txt` entries when the generated mapping is not the desired plain `s2t` output, or when `t2s(regional phrase key)` does not match the real Simplified input.
+- Keep `TWPhrases.txt` and `TWPhrasesRev.txt` bidirectionally consistent. Run `bazel test //data/dictionary:dictionary_TWPhrases_reverse_mapping_test` after editing either file.
+- For intentional one-way Taiwan vocabulary conversions, keep the forward mapping in `TWPhrases.txt` and add a self-mapping candidate on both sides so `tw2sp` can preserve the Taiwan term. For example, to make `s2twp` convert `信道 -> 通道` without forcing `tw2sp` to convert every `通道` back to `信道`, use `信道 -> 通道` plus `通道 -> 通道` in `TWPhrases.txt`, and make `TWPhrasesRev.txt` map `通道 -> 通道 信道`. The self-mapping keeps the reverse dictionary structurally consistent while making the reverse conversion prefer unchanged `通道`.
+- Use `python3 data/scripts/sort.py <file> <file>` for edited dictionary files instead of hand-sorting. Dictionary tests enforce sorted unique keys.
+- Add tests to `test/testcases/testcases.json` against the config that actually uses the dictionary. Taiwan vocabulary in `TWPhrases.txt` should normally be tested with `s2twp` / `tw2sp`, not `s2tw`.
+
+### Dictionary Binary Formats: `.ocd` and `.ocd2`
+- `.ocd` (legacy format) has `OPENCCDARTS1` as the file header, with the main body being serialized Darts double-array trie data, combined with `BinaryDict` structure to store key-value offsets and concatenation buffers. Loading process is detailed in `src/DartsDict.cpp` and `src/BinaryDict.cpp`. Commonly used in environments requiring `ENABLE_DARTS` for compatibility.
+- `.ocd2` (default format) has `OPENCC_MARISA_0.2.5` as the file header, followed by `marisa::Trie` data, then uses the `SerializedValues` module to store all candidate value lists. See `src/MarisaDict.cpp`, `src/SerializedValues.cpp` for details. This format is smaller and loads faster (e.g., `NEWS.md` records `STPhrases` reduced from 4.3MB to 924KB).
+- The command-line tool `opencc_dict` supports `text ↔ ocd2` (and optionally `ocd`) conversion. When adding or adjusting dictionaries, first edit `.txt`, then run the tool to generate the target format.
+
+## Development and Testing
+- The top-level build system supports CMake, Bazel, Python `pyproject.toml`, with cross-platform CI integration. The Node.js native addon is built with Bazel (`//node:opencc`).
+- `src/*Test.cpp`, `data/config/*Test.cpp`, `plugins/jieba/tests/`, `test/`, and `test/golden/` contain tests covering dictionary matching, conversion chains, configuration validation, plugin segmentation, CLI behavior, and golden conversion outputs.
+- Tools `opencc_dict`, `opencc_phrase_extract` (`src/tools/`) help developers convert dictionary formats and extract phrases.
+- Node.js tests live in `node/test.js`. npm prebuilt binaries are built with Bazel via `scripts/build-node-prebuild-bazel.sh` (see `node/PUBLISHING.md`). The `binding.gyp`/node-gyp source-build fallback has been replaced by a Bazel one: the native addon comes from `@opencc/opencc-<platform>-<arch>` scoped packages, and on platforms without one `scripts/install.js` runs a full Bazel source build at install time (compiles `//node:opencc`, regenerates `//data/dictionary:binary_dictionaries`, and refreshes `prebuilds/assets`; prebuilt assets still ship in the tarball for the scoped-package path).
+
+### C++ ABI Versioning
+- When a change introduces an ABI-incompatible modification to the public C++ interface, bump `OPENCC_ABI_VERSION` in `CMakeLists.txt` so downstream libraries and applications relink instead of silently loading an incompatible `libopencc` shared library.
+- Treat installed headers under `include/opencc/`, exported virtual interfaces, class layout, constructor/destructor signatures, inline public methods, and public symbol signatures as part of the ABI review surface. If in doubt, assume downstream C++ users may have compiled against it.
+- Keep private implementation helpers out of the installed header set when possible. Moving an installed header or public type to private is itself a compatibility decision and should be reflected in the release notes.
+
+### CLI Consistency Follow-up
+- There is ongoing work to align user-facing behavior across the native CLI, npm CLI, and Python CLI. Treat CLI behavior differences as intentional only when they are documented in `README.md` and covered by tests.
+- Known area to unify: `-c/--config` values that omit `.json`. Current target behavior is the npm CLI rule:
+  - Built-in config stems such as `s2t` and `t2s` should resolve to `s2t.json` / `t2s.json`.
+  - Custom config paths should be preserved as given; do not auto-append `.json` for arbitrary filenames.
+- Before changing config resolution rules in one CLI, check the corresponding implementations in `src/tools/CommandLineMain.cpp`, `node/cli.js`, and `python/opencc/__init__.py`, then update tests for all affected surfaces.
+- When possible, add both direct tests and subprocess/integration-style tests so packaging entry points and standalone CLI invocation are covered, not just in-process helper calls.
+
+## Ecosystem Bindings
+- Python module is located in `python/`, providing the `OpenCC` class through the C API.
+- Node.js extension is in the `node/` directory, using N-API/Node-API to call the core library. The optional `opencc-jieba` npm package lives in `plugins/jieba/node/` and supplies plugin configs, dictionaries, and platform-specific plugin binaries.
+- README lists third-party Swift, Java, Go, WebAssembly and other porting projects, showcasing ecosystem breadth.
+
+## Optional Plugin and Release Packaging
+- `BUILD_OPENCC_JIEBA_PLUGIN` enables the C++ jieba plugin in CMake builds. Since 1.4.1 it defaults to ON for top-level macOS builds (so Homebrew ships the plugin); other platforms, subproject builds (FetchContent / `add_subdirectory`), and Python wheel builds keep it OFF.
+- The merged jieba dictionary (`jieba_dict/jieba_merged.ocd2`) is generated at build time by `opencc_dict --from cppjieba_utf8`; there is no separate dictionary helper tool. Standalone plugin builds locate an installed `opencc_dict` and require OpenCC >= 1.4.1.
+- Source packages: `OPENCC_SOURCE_PACKAGE_PROFILE` (`full` / `opencc` / `bazel`) selects which CPack source archive is produced. The `opencc` profile is the trimmed C++ package including the Jieba plugin (no Node.js, Python, docs, or packaging files); the `bazel` profile is the same package plus the `node/`, `python/` and `scripts/` sources, so the Bazel `//node` and `//python` targets stay buildable and testable from the tarball (npm/PyPI packaging entry points such as `package.json`, `pyproject.toml`, `setup.py` and `plugins/jieba/node/` are still dropped). Both are intentionally buildable with **both** CMake and Bazel, so Bazel workspace files (`BUILD.bazel`, `MODULE.bazel[.lock]`, `.bazelrc`, `.bazelversion`, `.bazelignore`) and the top-level `patches/` directory (referenced by `MODULE.bazel`) are kept; only `.bazelrc.user` is dropped. When editing the trimmed ignore list, do not re-exclude Bazel files or `patches/`. `scripts/build-source-package.sh` holds the build and smoke-test logic (`build` / `smoke-test` / `all` with a profile argument) and is what `release-source.yml` runs, once per profile, on a `ver.*` tag (or `workflow_dispatch` with `release_tag`): it builds the archive, repacks it for reproducibility (normalized ownership, epoch-0 timestamps, sorted entries), smoke-tests it with CMake (core, CLI tools, Jieba plugin) and Bazel (the `bazel` profile additionally runs the full CI Bazel test patterns, including `//node` and `//python`), and uploads `.tar.gz` and `.tar.xz` to the draft release. Bazel target patterns are listed explicitly instead of `//...` because the vendored `deps/googletest-1.15.0` BUILD files do not load under current Bazel versions.
+- `plugins/README.md` documents plugin loading, ABI expectations, and standalone plugin builds.
+- `scripts/release-windows-winget.ps1` is the Windows portable/WinGet release path and produces the CLI zip, checksum, and WinGet manifests.
+- npm release packaging is separate from the native CLI release: `opencc` and `opencc-jieba` are packed as npm `.tgz` artifacts and should be install-tested together when plugin-backed npm configs are changed.
+- Release flow (since 1.4.1) is draft-first: publish the `@opencc/*` scoped binary packages via the `release-npm-binaries` workflow_dispatch, then push a `ver.*` tag. The tag creates a draft GitHub release (`release-draft.yml`, notes taken from the matching NEWS.md section) and the deb/doc/resource/winget workflows upload assets to the draft; everything up to this point is reversible. Manually publishing the release then triggers `release-npm` (main npm packages) and `release-pypi` — the irreversible publishes.
+
+## Common Customization Steps
+1. Edit or add dictionary entries in `data/dictionary/*.txt`.
+2. Use `opencc_dict` to convert to `.ocd2`.
+3. Copy/modify configuration JSON in `data/config` and specify new dictionary files.
+4. Add or update test cases in `test/testcases/testcases.json` for normal configs, or `plugins/jieba/tests/data/jieba_comparison_testcases.json` / golden fixtures for jieba-backed behavior.
+5. Load custom configuration through `SimpleConverter`, command-line tools, or language bindings to verify results.
+
+> For deeper understanding, read the module documentation in `src/README.md`, or refer to test cases in `test/` to understand conversion chain combinations.
+
+### Common Deviations in Third-Party Implementations (Speculation)
+- **Missing segmentation and conversion chain order**: If `group` configuration or dictionary priority is not restored, compound words may be split apart or overwritten by single characters.
+- **Missing longest prefix logic**: Character-by-character replacement alone will miss idioms and multi-character word results.
+- **Improper UTF-8 handling**: Overlooking multi-byte characters or surrogate pair handling can easily cause offset or truncation issues.
+- **Incomplete dictionaries/configuration**: Missing segmentation dictionaries, regional differences and other `.ocd2` files will result in missing words in output.
+- **Path and loading process differences**: If OpenCC's path search and configuration parsing details are not followed, the actual loaded resources will differ from official ones, naturally leading to different results.
+
+## Communication Language
+
+Respond in Traditional Chinese (繁體中文) preferred; Simplified Chinese acceptable. When quoting dictionary keys, code identifiers, file names, or any string literal that appears in the codebase in Simplified Chinese, preserve the original Simplified form verbatim — do not transliterate it.
+
+## Commit Message Style
+
+- **First line**: action verb + concise description, no conventional-commit prefix (`feat:`, `fix:`, `perf:`, etc.). Example: `Implement single-dictionary lookup fast-path for PrefixMatch`
+- **Body**: one or two sentences summarising motivation and scope, separated from the title by a blank line.
+- **Multi-area changes**: add a `Detailed Changes:` section with bold headers and sub-bullets:
+  ```
+  Detailed Changes:
+  - **Section Name**:
+    - Sub-point one.
+    - Sub-point two.
+  ```
+- **No** `Co-Authored-By` trailer lines.
+
+## Further Reading
+
+### Contribution Guide
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Complete guide on how to contribute dictionary entries to OpenCC, write test cases, and execute testing procedures.
+
+### Project Documents
+- **[src/README.md](src/README.md)** - Detailed technical documentation for core modules.
+- **[README.md](README.md)** - Project overview, installation and usage guide.

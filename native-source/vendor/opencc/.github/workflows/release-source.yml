@@ -1,0 +1,83 @@
+name: Source Package Release
+run-name: Source Package Release${{ !(startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') && ' (build only)' || '' }}
+
+# Builds the trimmed source packages and attaches them to the release:
+#   opencc  C++ core and Jieba plugin only.
+#   bazel   C++ core, Jieba plugin, and the Node.js/Python binding sources.
+# Both keep the CMake and Bazel build systems working, so each is smoke-tested
+# with both before upload (see scripts/build-source-package.sh).
+# Like the other release workflows it uploads to the draft created by
+# release-draft.yml; publishing is manual.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to upload the source package to, for example ver.1.4.1. Leave empty to only build the artifact."
+        required: false
+        type: string
+  push:
+    tags:
+      - "ver.*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-source-package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [opencc, bazel]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build build-essential
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+
+      - name: Set up Python
+        if: matrix.profile == 'bazel'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build trimmed source package
+        run: bash scripts/build-source-package.sh build ${{ matrix.profile }}
+
+      - name: Smoke-test the package (CMake and Bazel)
+        run: bash scripts/build-source-package.sh smoke-test ${{ matrix.profile }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencc-source-package-${{ matrix.profile }}
+          path: dist/opencc-*-${{ matrix.profile }}-src.tar.*
+
+      - name: Upload to GitHub release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.release_tag || github.ref_name }}"
+          for i in $(seq 1 30); do
+            gh release view "$tag" --json isDraft > /dev/null 2>&1 && break
+            echo "Waiting for release $tag to be created ($i/30)..."
+            sleep 10
+          done
+          gh release upload "$tag" \
+            dist/opencc-*-${{ matrix.profile }}-src.tar.gz \
+            dist/opencc-*-${{ matrix.profile }}-src.tar.xz \
+            --clobber

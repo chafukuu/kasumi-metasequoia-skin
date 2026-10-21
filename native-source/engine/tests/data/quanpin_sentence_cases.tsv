@@ -1,0 +1,38 @@
+# 全拼整句级切分评测集。eval_quanpin_sentence 逐条敲入「输入」，看首选是不是「期望首选」。
+# 列：输入<Tab>期望首选<Tab>类别<Tab>备注
+# 类别：
+#   ambiguous  同一串字母有两种等音节数的合法切分，正确的是最少音节规则平局时不选的那一种
+#   control    同上有歧义，但最少音节规则本来就选对了；改动后不能变差
+#   plain      没有切分歧义的普通整句和单词，用来盯回归
+#   word       备选切分在词库里有整词，仍按词频比较（不应受整句打分影响）
+#   typo       合法输入上的手误（需要打开纠错）
+yibananzhao	一般按照	ambiguous	yi'ban'an'zhao / yi'ba'nan'zhao
+woxianganzhaojihuazuo	我想按照计划做	ambiguous	xiang'an / xian'gan
+qinganzhaoshunxupaidui	请按照顺序排队	ambiguous	qing'an / qin'gan
+tamenyijinganzhaoyaoqiuzuole	他们已经按照要求做了	ambiguous	jing'an / jin'gan
+zhegefanganhenhao	这个方案很好	ambiguous	fang'an / fan'gan
+tadefanganbeitongguole	他的方案被通过了	ambiguous	fang'an / fan'gan
+fanganyijingdingle	方案已经定了	ambiguous	fang'an / fan'gan
+zhegexiangmudefangan	这个项目的方案	ambiguous	fang'an / fan'gan
+danganziliao	档案资料	ambiguous	dang'an / dan'gan
+anzhaoxinfanganzhixing	按照新方案执行	ambiguous	fang'an / fan'gan
+tazhengzaiganhuo	他正在干活	control	zheng'zai'gan
+jinanshidaxue	济南市大学	control	ji'nan / jin'an
+xinanjiaotongdaxue	西南交通大学	control	xi'nan / xin'an
+dananbusi	大难不死	control	da'nan / dan'an
+womendouhenganxieni	我们都很感谢你	control	hen'gan / heng'an
+tazhenganjing	他真干净	control	zhen'gan / zheng'an
+nihao	你好	plain
+womenyiqiqu	我们一起去	plain
+jintiantianqibucuo	今天天气不错	plain
+zhegewentiyinggaizenmejiejue	这个问题应该怎么解决	plain
+xianzaijiuqu	现在就去	plain
+ganxienidebangzhu	感谢你的帮助	plain
+anzhaoguiding	按照规定	plain
+tiananmenguangchang	天安门广场	plain
+zaijinuta	再激怒他	plain	贪心切分在 jin 上卡死的合法输入；再/在 两可，只盯切分不回退
+fangan	方案	word
+danganguan	档案馆	word
+changanjie	长安街	word
+ziazheliya	在这里呀	typo
+jiuzheeyang	就这样	typo

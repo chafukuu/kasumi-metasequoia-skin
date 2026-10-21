@@ -1,0 +1,9 @@
+# 万象搭配口语的端到端复现集：这些口语在纯词频/切分争抢下会出同音乱码，靠 octagram 解码期
+# 一次注入救回。需要数据目录里有 .gram（models/<id>/<id>.gram），没有模型时整句来源行为退化。
+# eval_quanpin_sentence engine\tests\data\quanpin_collocation_cases.tsv 3 octagram
+# 列：输入<Tab>期望首选<Tab>类别
+duojiabing	多加冰	collocation
+zhuzailiwu	住在里屋	collocation
+jiangejidan	煎个鸡蛋	collocation
+jishangzhang	记上账	collocation
+shanshiyougaodaodi	山势由高到低	collocation

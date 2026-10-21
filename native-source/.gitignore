@@ -1,0 +1,37 @@
+.vs/
+out/
+build/
+Release/
+build64/
+build64-release/
+build32/
+build32-release/
+draft/
+*.log
+CMakeSettings.json
+log.txt
+.workbuddy/
+
+# Release staging. The dictionary release is the only product input that still comes from outside
+# this repository, and both the release workflow and a local release rehearsal drop it beside the
+# components under this name.
+/MetasequoiaImeDict/
+
+# 语言模型：来源锁和授权声明进仓库，下载的语料、转换工具的构建目录和编出来的 sc.lm
+# 不进 —— 它们都能由 scripts/build-language-model.ps1 从 lock.json 重新得到。
+/language-model/cache/
+/language-model/sc.lm
+/language-model/sc.lm.incoming
+
+# 神经整句模型：lock.json 和 NOTICE.md 进仓库，下载下来的 safetensors 不进 ——
+# 由 scripts/fetch-neural-model.ps1 按 lock.json 从 release 重新取到并校验 sha256。
+/neural-model/*.safetensors
+__pycache__/
+
+# 外部模型包：models/ 下是按需下载的大文件（如万象 .gram 400MB），来源与摘要
+# 记在调研文档与锁文件里，不进仓库。
+/models/
+
+# 本地测试数据暂存（照 scripts/ci/test-server.ps1 的布局手工准备的）
+/stage/
+/.tmp-test/

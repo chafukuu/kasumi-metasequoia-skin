@@ -1,0 +1,63 @@
+schema_version = 1
+
+id = "qq-blue"
+name = "QQ 经典蓝"
+version = "1.0.0"
+description = "腾讯 QQ 配色：亮蓝光标与序号，深蓝选中块"
+base = "fluent"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 0
+
+[candidate.dark]
+accent = "#12B7F5"
+selected = "#0052D9"
+hover = "rgba(18,161,245,.24)"
+surface = "#1F2226"
+border = "rgba(18,161,245,.35)"
+text = "#E9E8E8"
+number = "#B0E3FB"
+translation = "#9D68D3"
+translation_pos = "#E255A180"
+translation_separator = "#9D68D373"
+selected_translation = "#E1D0F1"
+selected_translation_pos = "#E255A180"
+selected_translation_separator = "#E1D0F173"
+show_selected_bar = false
+
+[candidate.light]
+accent = "#0091EA"
+selected = "#D6EDFD"
+hover = "rgba(0,145,234,.12)"
+surface = "#FFFFFF"
+border = "#DCE6F0"
+text = "#1A1A1A"
+number = "#0052D9"
+translation = "#9065B0"
+translation_pos = "#AD1A7280"
+translation_separator = "#9065B073"
+selected_translation = "#7F599B"
+selected_translation_pos = "#AD1A7280"
+selected_translation_separator = "#7F599B73"
+show_selected_bar = false
+
+# 工具栏跟候选窗同一套底色、边框和亮蓝拖动条；不写会沿用 fluent 的黑底紫条。
+[toolbar.dark]
+background = "#1F2226"
+border = "rgba(18,161,245,.35)"
+handle = "#12B7F5"
+divider = "rgba(18,161,245,.24)"
+icon = "#E9E8E8"
+hover = "rgba(18,161,245,.24)"
+
+[toolbar.light]
+background = "#FFFFFF"
+border = "#DCE6F0"
+handle = "#0091EA"
+divider = "#DCE6F0"
+icon = "#1A1A1A"
+hover = "rgba(0,145,234,.12)"

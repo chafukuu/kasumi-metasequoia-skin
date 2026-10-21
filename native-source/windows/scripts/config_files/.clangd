@@ -1,0 +1,46 @@
+CompileFlags:
+  Add: [
+      "-std=c++17", # needed when using MSVC
+      # Macros
+      -DUNICODE,
+      -D_UNICODE,
+      # -DFANY_DEBUG,
+      # Project src include paths
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Candidate",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Compartment",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Composition",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/DictEngine",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/DisplayAttribute",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Drawing",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Edit",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/FanyLog",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/File",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Global",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Header",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/IME",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/IPC",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Key",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/LanguageBar",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Register",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Tf",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Thread",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/UI",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Utils",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/src/Window",
+      # Third-party include paths via git submodules
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/utfcpp/source",
+      # Third-party include paths via vcpkg
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/build64/vcpkg_installed/x64-windows-static/include",
+      "-IC:/Users/19833/EDisk/CppCodes/ImeCodes/MetasequoiaImeTsf/build32/vcpkg_installed/x86-windows-static/include",
+      -Wno-unused-includes,
+      -Wno-microsoft-goto,
+      # -Wno-unused-value,
+      -Wno-nonportable-include-path,
+      -Wno-microsoft-extra-qualification,
+      -Wno-invalid-token-paste,
+    ] # ignore some specific warnings
+Diagnostics:
+  UnusedIncludes: None # This would not work in Windows, why?
+  Includes:
+    IgnoreHeader: ["Private.h", "Globals.h"] # Suppress unused includes waraning

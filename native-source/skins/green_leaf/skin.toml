@@ -1,0 +1,123 @@
+# 绿叶：随安装包分发的官方贴图皮肤，设置页把它列在内置皮肤之后。在 canvas 全贴图基底上，用九宫格面板图、
+# 上下两层挂件和一个循环播放的 APNG 小动画拼出整个候选框；深色是夜蓝玻璃面板，浅色换成薄荷白面板。
+# 所有图片都是程序生成的几何图形；浅色面板由 examples/skin-examples/tools/gen_green_leaf_panel.py 生成。
+
+schema_version = 2                 # v2 必须以 canvas 为 base；写了 2 而 base 不是 canvas 的皮肤按 1 处理
+id = "green_leaf"
+name = "绿叶"
+version = "1.1.0"
+author = "Metasequoia IME contributors"
+description = "夜蓝 / 薄荷白玻璃九宫格面板、面板后探出的叶子、右上角循环闪烁的星光。"
+# canvas：透明面板、无描边、无圆角、无阴影，外观全部来自下面的贴图。它只能当 base，不能单独选用。
+base = "canvas"
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 168
+item_corner_radius_dip = 5         # 选中 / 悬停高亮的圆角
+# 预编辑行与候选之间的距离，0–100 DIP；只影响这一处，不影响候选与翻页箭头之间。
+line_gap_dip = 4
+
+# 九宫格面板图，语义同 CSS border-image（stretch）。
+# 两张面板都是 64×64 的 2 倍图：切片按源图像素写 20，边框按屏幕 DIP 画 10 宽，所以 200% 缩放下逐像素清晰，
+# 100% 下是缩小一半的同一张图。四角的小菱形落在切片之内，不会被拉伸。
+[candidate_window.border_image]
+source = "assets/panel.png"        # 深色主题
+light_source = "assets/panel-light.png" # 浅色主题；切片、边宽与 fill 和 source 共用
+slice_dip = [20]                   # 切片线，源图像素，1/2/4 个值（上右下左，同 CSS）
+width_dip = [10]                   # 边框绘制宽度，DIP；不写时取切片的数值
+fill = true                        # 画九宫格中心块；false 时中心留空
+
+# 内容（预编辑与候选）离面板外缘的距离，DIP；某一边小于边框宽度时按边框宽度算。
+[candidate_window.content_insets_dip]
+top = 10
+right = 12
+bottom = 10
+left = 12
+
+# 挂件伸到卡片外面时窗口要多留的透明空白，DIP。
+[candidate_window.outer_insets_dip]
+top = 12
+right = 10
+bottom = 12
+left = 14
+
+# 挂件：z_index < 1 的画在面板之下，其余画在面板与文字之上；同层按 z_index、再按书写顺序叠放。
+# 图片在 width_dip × height_dip 的框里等比缩放、居中；anchor 是框贴着面板的哪个位置，offset 正数向右、向下。
+[[candidate_window.decorations]]
+image = "assets/leaf.png"          # 64×64 的 2 倍图，画成 32×32 DIP
+anchor = "bottom-left"
+offset_x_dip = -14
+offset_y_dip = 12
+width_dip = 32
+height_dip = 32
+z_index = 0                        # 在面板之下：只有伸出面板的那一截看得见
+
+[[candidate_window.decorations]]
+image = "assets/sparkle.apng"      # 8 帧、每帧 100 ms、无限循环；系统关闭动画效果时只显示第一帧
+anchor = "top-right"
+offset_x_dip = 10
+offset_y_dip = -12
+width_dip = 24
+height_dip = 24
+z_index = 2
+
+# 深色：夜蓝玻璃面板上的浅色文字。
+[candidate.dark]
+accent = "#5eead4"
+selected = "rgba(94, 234, 212, 0.20)"
+hover = "rgba(94, 234, 212, 0.10)"
+text = "#e8f1ff"
+number = "rgba(232, 241, 255, 0.60)"
+preedit_text = "#99f6e4"
+selected_text = "#ffffff"
+selected_bar = "#fde68a"
+
+# 浅色：薄荷白面板上的深色文字，强调色换成叶绿。
+[candidate.light]
+accent = "#16a37f"
+selected = "rgba(22, 163, 127, 0.16)"
+hover = "rgba(22, 163, 127, 0.08)"
+text = "#17322a"
+number = "rgba(23, 50, 42, 0.55)"
+translation = "#5b6f68"
+preedit_text = "#0f766e"
+selected_text = "#0b3b30"
+selected_bar = "#e2ac2e"
+
+[candidate.dark.menu]
+background = "#1b2236"
+border = "rgba(94, 234, 212, 0.35)"
+text = "#e8f1ff"
+hover = "rgba(94, 234, 212, 0.14)"
+
+[candidate.light.menu]
+background = "#f7fcf9"
+border = "rgba(22, 163, 127, 0.35)"
+text = "#17322a"
+hover = "rgba(22, 163, 127, 0.10)"
+
+# 悬浮工具栏与面板同色，拖动条跟 accent。
+[toolbar.dark]
+background = "#1b2236"
+border = "rgba(94, 234, 212, 0.35)"
+handle = "#5eead4"
+divider = "rgba(94, 234, 212, 0.22)"
+icon = "#e8f1ff"
+hover = "rgba(94, 234, 212, 0.14)"
+
+[toolbar.light]
+background = "#f7fcf9"
+border = "rgba(22, 163, 127, 0.35)"
+handle = "#16a37f"
+divider = "rgba(22, 163, 127, 0.22)"
+icon = "#17322a"
+hover = "rgba(22, 163, 127, 0.10)"
+
+[license]
+code = "MIT"
+assets = "MIT"
+source = "Generated geometry by the Metasequoia IME contributors."

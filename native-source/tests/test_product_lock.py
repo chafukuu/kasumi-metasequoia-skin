@@ -1,0 +1,244 @@
+import copy
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("product_lock", ROOT / "scripts/product_lock.py")
+lock = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(lock)
+
+
+class ProductLockTests(unittest.TestCase):
+    def setUp(self):
+        self.data = lock.load(ROOT / "product-lock.json")
+
+    def test_mutable_refs_and_missing_components_are_rejected(self):
+        # REPOSITORIES is empty now that the engine is vendored in-tree, so this loop guards a rule
+        # rather than a current entry: whatever external input is locked next still may not be
+        # pinned to anything a maintainer could move.
+        for component in lock.REPOSITORIES:
+            for ref in ("main", "latest", "v1.0", "abc123", "a" * 40 + "\n"):
+                with self.subTest(component=component, ref=ref):
+                    changed = copy.deepcopy(self.data)
+                    changed["repositories"][component]["commit"] = ref
+                    with self.assertRaises(ValueError):
+                        lock.validate(changed)
+        changed = copy.deepcopy(self.data)
+        changed["repositories"]["extra"] = {"repository": "metasequoiaime/MSIME-Engine", "commit": "a" * 40}
+        with self.assertRaises(ValueError):
+            lock.validate(changed)
+
+    def test_dictionary_provenance_requires_an_immutable_source_commit(self):
+        for commit in ("", "main", "a" * 39, "a" * 40 + "\n"):
+            with self.subTest(commit=commit):
+                changed = copy.deepcopy(self.data)
+                changed["dictionary"]["source_commit"] = commit
+                with self.assertRaises(ValueError):
+                    lock.validate(changed)
+
+    def test_only_the_shipped_tag_may_still_name_the_retired_dictionary_repository(self):
+        self.data["dictionary"]["repository"] = "metasequoiaime/MSIME-Dict"
+        self.data["dictionary"]["tag"] = lock.LEGACY_DICTIONARY_TAG
+        # That tag shipped before the manifest existed, which the asset-set rule already encodes.
+        self.data["dictionary"]["assets"].pop(lock.PRODUCT_MANIFEST, None)
+        lock.validate(self.data)
+        # Any other tag from the retired repository is a source migration, which is a reviewed
+        # change to product_lock.py rather than something a tag rename can do quietly.
+        self.data["dictionary"]["tag"] = "dict-2026.09.07"
+        with self.assertRaises(ValueError):
+            lock.validate(self.data)
+
+    def test_data_tag_and_complete_artifact_set_are_required(self):
+        for tag in ("latest", "main", "../dict-test", "dict-test\n"):
+            changed = copy.deepcopy(self.data)
+            changed["dictionary"]["tag"] = tag
+            with self.assertRaises(ValueError):
+                lock.validate(changed)
+        for name in lock.ASSETS:
+            changed = copy.deepcopy(self.data)
+            del changed["dictionary"]["assets"][name]
+            with self.assertRaises(ValueError):
+                lock.validate(changed)
+
+    def test_assets_cannot_escape_the_output_directory(self):
+        self.data["dictionary"]["assets"]["../notice.txt"] = "a" * 64
+        with self.assertRaises(ValueError):
+            lock.validate(self.data)
+
+    def test_modern_dictionary_requires_a_compatible_locked_manifest(self):
+        self.data['dictionary']['tag'] = 'dict-v1.0.0'
+        self.data['dictionary']['repository'] = lock.DICTIONARY_REPOSITORY
+        self.data['dictionary']['assets'].pop(lock.PRODUCT_MANIFEST, None)
+        with self.assertRaises(ValueError):
+            lock.validate(self.data)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self.fixture_assets(directory)
+            for name in lock._product.DESKTOP_FILES:
+                (directory / name).write_bytes(b'MSJPDT1\0fixture' if name == 'dict_japanese.dat' else b'fixture')
+            product = {'manifest_version': 1, 'format_version': 1, 'profile': 'desktop',
+                       'source': {'repository': self.data['dictionary']['repository'],
+                                  'commit': self.data['dictionary']['source_commit'], 'dirty': False},
+                       'engine_compatibility': {'dictionary_format': 1, 'japanese_model_magic': 'MSJPDT1'},
+                       'files': {name: {'sha256': lock.sha256(directory / name), 'size': (directory / name).stat().st_size}
+                                 for name in lock._product.DESKTOP_FILES}}
+            manifest_path = directory / lock.PRODUCT_MANIFEST
+            manifest_path.write_text(json.dumps(product))
+            for name in (*lock.ASSETS, lock.PRODUCT_MANIFEST):
+                self.data['dictionary']['assets'][name] = lock.sha256(directory / name)
+            lock.validate(self.data)
+            lock.verify_assets(directory, self.data)
+            # Data built from a commit other than the reviewed one is rejected even when every
+            # digest matches, because the digests only attest to the bytes, not to their origin.
+            original_commit = product['source']['commit']
+            product['source']['commit'] = 'f' * 40
+            manifest_path.write_text(json.dumps(product))
+            self.data['dictionary']['assets'][lock.PRODUCT_MANIFEST] = lock.sha256(manifest_path)
+            with self.assertRaises(ValueError):
+                lock.verify_assets(directory, self.data)
+            # A release built from an uncommitted tree cannot be rebuilt from anything.
+            product['source'] = {'repository': self.data['dictionary']['repository'],
+                                 'commit': original_commit, 'dirty': True}
+            manifest_path.write_text(json.dumps(product))
+            self.data['dictionary']['assets'][lock.PRODUCT_MANIFEST] = lock.sha256(manifest_path)
+            with self.assertRaises(ValueError):
+                lock.verify_assets(directory, self.data)
+            product['source']['dirty'] = False
+            # Even a deliberately updated digest cannot declare an unsupported format compatible.
+            product['format_version'] = 2
+            manifest_path.write_text(json.dumps(product))
+            self.data['dictionary']['assets'][lock.PRODUCT_MANIFEST] = lock.sha256(manifest_path)
+            with self.assertRaises(ValueError):
+                lock.verify_assets(directory, self.data)
+
+    def fixture_assets(self, directory):
+        # Digest enforcement is what these fixtures are for; the manifest carries provenance and is
+        # covered by its own test, so it is dropped rather than faked into something verifiable.
+        self.data["dictionary"]["assets"].pop(lock.PRODUCT_MANIFEST, None)
+        for name in lock.ASSETS:
+            value = (name + " fixture").encode()
+            (directory / name).write_bytes(value)
+            self.data["dictionary"]["assets"][name] = hashlib.sha256(value).hexdigest()
+
+    def test_mutating_both_database_and_upstream_checksums_still_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self.fixture_assets(directory)
+            lock.verify_assets(directory, self.data)
+            (directory / "msime.db").write_bytes(b"replacement database")
+            (directory / "SHA256SUMS.txt").write_text(lock.sha256(directory / "msime.db") + "  msime.db\n")
+            with self.assertRaises(ValueError):
+                lock.verify_assets(directory, self.data)
+
+    def test_failed_download_never_overwrites_previous_usable_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            staging = Path(temporary)
+            target = staging / "MetasequoiaImeDict/out"
+            target.mkdir(parents=True)
+            self.fixture_assets(target)
+            before = {path.name: path.read_bytes() for path in target.iterdir()}
+
+            def corrupt_download(command, **kwargs):
+                incoming = Path(command[command.index("--dir") + 1])
+                for name, value in before.items():
+                    (incoming / name).write_bytes(value)
+                (incoming / "others.db").write_bytes(b"truncated")
+
+            with mock.patch.object(lock.subprocess, "run", side_effect=corrupt_download):
+                with self.assertRaises(ValueError):
+                    lock.fetch_dictionaries(staging, self.data)
+            self.assertEqual(before, {path.name: path.read_bytes() for path in target.iterdir()})
+
+    def test_the_engine_is_no_longer_an_external_input(self):
+        # The engine is a directory of this repository, so the commit under test already pins it and
+        # the lock has nothing to say about it. A reappearing entry means either a resurrected
+        # submodule or a hand edit, and both have to fail here rather than be silently carried into
+        # the shipped manifest as a claim about an upstream commit nobody checked.
+        self.assertEqual(self.data["repositories"], {})
+        self.assertFalse((ROOT / "vendor/MetasequoiaImeEngine").exists())
+        self.assertTrue((ROOT / "engine/CMakeLists.txt").is_file())
+        changed = copy.deepcopy(self.data)
+        changed["repositories"]["engine"] = {"repository": "metasequoiaime/MSIME-Engine", "commit": "a" * 40}
+        with self.assertRaises(ValueError):
+            lock.validate(changed)
+
+    def test_outputs_export_the_dictionary_tag_and_nothing_else(self):
+        # release.yml reads dictionary_tag off this step. engine_sha was the other export and its
+        # consumers went with the submodule; an export that outlived them would hand a later job a
+        # commit that no longer means anything.
+        self.assertEqual(lock.github_outputs(self.data), f"dictionary_tag={self.data['dictionary']['tag']}\n")
+
+    def compare_status(self, status):
+        def api(endpoint):
+            return {"status": status} if "/compare/" in endpoint else {"default_branch": "main"}
+        return api
+
+    def test_a_locked_commit_that_never_reached_its_default_branch_is_rejected(self):
+        # An ancestor of the default branch compares as behind, or identical when it is the tip.
+        for status in ("behind", "identical"):
+            with self.subTest(status=status):
+                with mock.patch.object(lock, "api", side_effect=self.compare_status(status)):
+                    lock.verify_published(self.data)
+        # ahead and diverged both mean the commit sits on something nobody merged. This is what
+        # locking a commit that only exists on a pull request branch looks like.
+        for status in ("ahead", "diverged"):
+            with self.subTest(status=status):
+                with mock.patch.object(lock, "api", side_effect=self.compare_status(status)):
+                    with self.assertRaises(ValueError):
+                        lock.verify_published(self.data)
+
+    def test_a_commit_the_component_repository_does_not_have_is_rejected(self):
+        def missing(endpoint):
+            if "/compare/" in endpoint:
+                raise subprocess.CalledProcessError(1, "gh")
+            return {"default_branch": "main"}
+
+        with mock.patch.object(lock, "api", side_effect=missing):
+            with self.assertRaises(ValueError):
+                lock.verify_published(self.data)
+
+    def test_a_dictionary_release_cut_from_an_unmerged_branch_is_rejected(self):
+        source = self.data["dictionary"]["source_commit"]
+
+        def api(endpoint):
+            if "/compare/" not in endpoint:
+                return {"default_branch": "main"}
+            # Everything the repositories block pins is merged; only the dictionary source is not.
+            return {"status": "ahead" if endpoint.endswith(source) else "behind"}
+
+        with mock.patch.object(lock, "api", side_effect=api):
+            with self.assertRaises(ValueError):
+                lock.verify_published(self.data)
+
+    def test_a_retired_dictionary_repository_that_no_longer_answers_is_not_a_release_failure(self):
+        self.data["dictionary"]["repository"] = "metasequoiaime/MSIME-Dict"
+        self.data["dictionary"]["tag"] = lock.LEGACY_DICTIONARY_TAG
+
+        def archived(endpoint):
+            if endpoint.startswith("repos/metasequoiaime/MSIME-Dict"):
+                raise subprocess.CalledProcessError(1, "gh")
+            return {"status": "behind"} if "/compare/" in endpoint else {"default_branch": "main"}
+
+        with mock.patch.object(lock, "api", side_effect=archived):
+            lock.verify_published(self.data)
+
+    def test_manifest_records_exact_source_and_lock_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "manifest.json"
+            commit = "1" * 40
+            subprocess.run(["python3", str(ROOT / "scripts/product_lock.py"), "manifest",
+                            "--windows-commit", commit, "--output", str(output)], check=True)
+            manifest = json.loads(output.read_text())
+            self.assertEqual(manifest["repositories"]["windows"]["commit"], commit)
+            self.assertEqual(manifest["dictionary"], self.data["dictionary"])
+            self.assertEqual(manifest["lock_sha256"], lock.sha256(ROOT / "product-lock.json"))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,108 @@
+"""Bazel build rules for the OpenCC Node.js native addon (opencc.node)."""
+
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@rules_node_addon//node_addon:defs.bzl", "node_addon")
+load(":cc_headers_files.bzl", "cc_header_pick", "cc_headers_files")
+
+package(default_visibility = ["//visibility:public"])
+
+# JavaScript API sources exercised by the Node.js js_test (//:node_test).
+js_library(
+    name = "js_srcs",
+    srcs = [
+        "cli.js",
+        "opencc.js",
+        "test.js",
+    ],
+)
+
+# Raw Node header files for the Windows-Zig cross-compile ONLY (see the genrule
+# below). The main native-addon path (//node:opencc) gets its Node headers
+# through node_addon and does NOT use these targets. rules_nodejs only exposes
+# the toolchain headers as a cc_library (CcInfo), so we unwrap them into raw
+# files that `zig c++` can consume via $(location) / -I.
+cc_headers_files(
+    name = "windows_zig_node_header_files",
+    lib = "@rules_nodejs//nodejs/headers:current_node_cc_headers",
+)
+
+cc_header_pick(
+    name = "windows_zig_node_api_h",
+    basename = "node_api.h",
+    lib = "@rules_nodejs//nodejs/headers:current_node_cc_headers",
+)
+
+# The native Node addon (opencc.node). node_addon wraps a linkshared cc_binary
+# and renames the output to "opencc.node", and supplies node-addon-api plus the
+# Node C headers itself (the rules_nodejs toolchain on Unix; the windows_node_api
+# import library on Windows).
+#
+# The binding source is compiled here and linked against //src:opencc_lib.
+node_addon(
+    name = "opencc",
+    srcs = ["opencc.cc"],
+    copts = select({
+        "@platforms//os:windows": ["/std:c++20"],
+        "//conditions:default": ["-std=c++20"],
+    }),
+    defines = [
+        'OPENCC_VERSION=\\"1.4.2\\"',
+        "NAPI_DISABLE_CPP_EXCEPTIONS",
+        "Opencc_BUILT_AS_STATIC",
+    ],
+    includes = [".", "src"],
+    # node_addon already appends `-undefined dynamic_lookup` on macOS.
+    linkopts = select({
+        # LC_UUID must be kept: modern macOS dyld rejects dlopen of a bundle
+        # without it (ERR_DLOPEN_FAILED "missing LC_UUID load command").
+        "@platforms//os:macos": ["-Wl,-S"],
+        "@platforms//os:linux": ["-Wl,-s", "-Wl,--build-id=sha1"],
+        "//conditions:default": ["-Wl,-s"],
+    }),
+    deps = [
+        "//src:opencc_lib",
+        # Explicit sub-library deps for headers not in //src:opencc_lib's hdrs:
+        "//src:config_lib",       # Config.hpp
+        "//src:converter_lib",    # Converter.hpp, ConversionInspection.hpp
+        "//src:dict_converter_lib",  # DictConverter.hpp
+        "//src:exception_lib",    # Exception.hpp
+    ],
+)
+
+genrule(
+    name = "opencc_node_windows_zig",
+    srcs = [
+        "opencc.cc",
+        "//deps/darts-clone-0.32h:all_files",
+        "//deps/marisa-0.3.1:all_files",
+        "//deps/rapidjson-1.1.0:all_files",
+        "//src:all_files",
+        # node-addon-api headers, exposed as raw files via exports_files in the
+        # BCR node_addon_api module's BUILD overlay.
+        "@node_addon_api//:napi-inl.deprecated.h",
+        "@node_addon_api//:napi-inl.h",
+        "@node_addon_api//:napi.h",
+        # Node C headers for cross-compiling only; the host Node toolchain's
+        # headers (node_api.h is platform-agnostic) feed the zig build.
+        ":windows_zig_node_header_files",
+    ],
+    outs = ["windows-x64/opencc.node"],
+    cmd = (
+        "ZIG=$(ZIG_BIN) " +
+        "bash $(location //scripts:build_node_windows_zig) " +
+        "$@ " +
+        "$(location :windows_zig_node_api_h) " +
+        "$(location @node_addon_api//:napi.h) " +
+        "$(location @node_win_x64_lib//file)"
+    ),
+    tools = [
+        "//scripts:build_node_windows_zig",
+        "@node_addon_api//:napi-inl.deprecated.h",
+        "@node_addon_api//:napi-inl.h",
+        "@node_addon_api//:napi.h",
+        ":windows_zig_node_api_h",
+        ":windows_zig_node_header_files",
+        "@node_win_x64_lib//file",
+    ],
+    toolchains = ["@rules_zig//zig:toolchain_type"],
+)

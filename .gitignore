@@ -1,0 +1,5 @@
+/dist/
+/build/
+/packaging/native/*.exe
+**/__pycache__/
+*.log

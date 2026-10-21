@@ -1,0 +1,202 @@
+set(TEST_EXECUTABLE_NAME "MetasequoiaImeServerTests")
+
+add_executable(test_voice_control_dispatch src/test_voice_control_dispatch.cpp
+    ../src/ipc/voice_control_dispatch.cpp)
+target_include_directories(test_voice_control_dispatch PRIVATE ../src "${MSIME_ENGINE_DIR}")
+target_compile_features(test_voice_control_dispatch PRIVATE cxx_std_17)
+add_test(NAME voice_control_dispatch COMMAND test_voice_control_dispatch)
+
+set(TEST_SOURCE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/benchmark_model_path.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_date_time_query.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_v_mode_query.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_emoji_query.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_kaomoji_query.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_jianpin_query.cpp"
+    "${CMAKE_SOURCE_DIR}/src/clipboard/clipboard_history.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_kaomoji_sql.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_shuangpin_scheme.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_custom_shuangpin.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_quanpin_scheme.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_wubi.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_japanese_romaji.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_shuangpin_query.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_engine_shuangpin_session.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_caret_prefix_input_session.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_english_dictionary.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_mixed_english_placement.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_translation_gloss.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_default_config_credentials.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cloud/translation_gloss.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_custom_translation.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cloud/custom_translation.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_translation.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cloud/ai_translation.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/chat_completions.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/jev_client.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_jev_candidates.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_niutrans_translation.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cloud/niutrans_translation.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_active_client_state.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_outbound_session_state.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_pipe_write_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_input_key_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_ui_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_async_request_origin.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_assistant_cache_key.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/ai_assistant_cache_key.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_assistant_cache.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/ai_assistant_cache.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_assistant_request.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/ai_assistant_request.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_ui_action_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_translation_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_context_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_ui_state.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_expansion_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_composition_selection_history.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_render_sync.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_selection_replay_guard.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_serial_task_runner.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/serial_task_runner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_shuangpin_preedit_display.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/shuangpin_preedit_display.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_wheel_paging.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_view_model.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_text_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_settings_performance.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_size_estimator.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/candidate_size_estimator.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ipc_protocol_constants.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_voice_composition_pipe.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_voice_providers.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_vendor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_ai_provider_store.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_reasoning_strip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_voice_batch_protocol.cpp"
+    "${CMAKE_SOURCE_DIR}/src/voice-input/voice_batch_protocol.cpp"
+    "${CMAKE_SOURCE_DIR}/src/voice-input/voice_providers.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_floating_toolbar_visibility_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_caret_state_indicator_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_tray_menu_placement.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_terminal_deactivation_policy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_user_dictionary_journal.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_config_template_merge.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_config_non_ascii_path.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_collocation_model.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_neural_model.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_network_proxy.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_dictionary_replay_non_ascii_path.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_non_ascii_path.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_colors.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_bases.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_images.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_page_arrows.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_supports.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_palette.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_non_ascii_path_contract.cpp"
+    "${CMAKE_SOURCE_DIR}/src/skin/candidate_skin_catalog.cpp"
+    "${CMAKE_SOURCE_DIR}/src/window/candidate_skin_palette.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_tokens.cpp"
+    "${CMAKE_SOURCE_DIR}/src/window/candidate_skin_tokens.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_layers.cpp"
+    "${CMAKE_SOURCE_DIR}/src/window/candidate_skin_layers.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_floating_toolbar_skin.cpp"
+    "${CMAKE_SOURCE_DIR}/src/window/floating_toolbar_skin.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_system_font_family.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_dictionary_validation.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_stats_frame_decode.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_stats_aggregate.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_stats_overview.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_stats_store.cpp"
+    "${CMAKE_SOURCE_DIR}/src/statistics/stats_frames.cpp"
+    "${CMAKE_SOURCE_DIR}/src/statistics/stats_aggregate.cpp"
+    "${CMAKE_SOURCE_DIR}/src/statistics/stats_overview.cpp"
+    "${CMAKE_SOURCE_DIR}/src/statistics/stats_store.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/credential_protection.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/ai_provider_store.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_credentials.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_appearance.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_fonts.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_general.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_input.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_keys.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_services.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_shuangpin.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_template.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_theme.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_toml.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_toolbar.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/ime_config_write.cpp"
+    "${CMAKE_SOURCE_DIR}/src/session/engine_input_session.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/common_utils.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/hanzi_pinyin.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/ime_paths.cpp"
+    "${CMAKE_SOURCE_DIR}/src/utils/network_proxy.cpp"
+    "${CMAKE_SOURCE_DIR}/src/settings/dictionary_validation.cpp"
+    # The catalog/download/delete behaviors under test live in collocation_model.cpp, so the
+    # activation-fallback and id-guard cases link the real translation unit.
+    "${CMAKE_SOURCE_DIR}/src/settings/collocation_model.cpp"
+    "${CMAKE_SOURCE_DIR}/src/settings/neural_model.cpp"
+    # Routing lives in dictionary_manager.cpp's HandleRequest, so the importHans dispatch test has
+    # to link the real translation unit rather than restate the branch order.
+    "${CMAKE_SOURCE_DIR}/src/settings/dictionary_manager.cpp"
+)
+
+add_executable(${TEST_EXECUTABLE_NAME} ${TEST_SOURCE_FILES})
+
+target_include_directories(${TEST_EXECUTABLE_NAME}
+    PRIVATE
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/src"
+    "${MSIME_VENDOR_DIR}"
+    "${MSIME_ENGINE_DIR}/utfcpp/source"
+)
+
+# test_default_config_credentials reads the config the installer actually ships, so the check is
+# against the shipped file rather than a restatement of today's placeholder spellings.
+# test_custom_shuangpin parses the example users are told to copy, so the documentation cannot drift
+# from what the parser accepts.
+# test_dictionary_replay_non_ascii_path launches the real replay tool, because the path handling it
+# guards lives in that executable's main() and cannot be linked into the test binary.
+target_compile_definitions(${TEST_EXECUTABLE_NAME}
+    PRIVATE
+    "MSIME_DEFAULT_CONFIG_PATH=\"${CMAKE_SOURCE_DIR}/../installer/default_config/config.default.toml\""
+    "MSIME_CUSTOM_SHUANGPIN_EXAMPLE_PATH=\"${CMAKE_SOURCE_DIR}/../docs/custom-shuangpin.example.toml\""
+    "MSIME_DICTIONARY_REPLAY_EXE=\"$<TARGET_FILE:${DICTIONARY_REPLAY_EXECUTABLE_NAME}>\""
+)
+
+add_dependencies(${TEST_EXECUTABLE_NAME} ${DICTIONARY_REPLAY_EXECUTABLE_NAME})
+
+target_link_libraries(${TEST_EXECUTABLE_NAME}
+    PRIVATE
+    MetasequoiaIme::Engine
+    MetasequoiaIme::Voice
+    nlohmann_json::nlohmann_json
+    fmt::fmt
+    spdlog::spdlog
+    Boost::locale
+    Boost::json
+    CURL::libcurl
+    unofficial::sqlite3::sqlite3
+    # dictionary_manager.cpp annotates pure-Chinese imports with cpp-pinyin and clears the
+    # candidate cache through user32 window messages.
+    cpp-pinyin::cpp-pinyin
+    dwrite
+    user32
+    shell32
+    advapi32
+    ole32
+)
+
+add_test(NAME ${TEST_EXECUTABLE_NAME} COMMAND ${TEST_EXECUTABLE_NAME})
+
+# The identical fixture file also runs in Engine's JavaScript contract CI.
+add_executable(test_webview_contract "${MSIME_ENGINE_DIR}/contracts/webview/test.cpp")
+target_link_libraries(test_webview_contract PRIVATE Boost::json)
+add_test(NAME webview_contract COMMAND test_webview_contract
+    "${MSIME_ENGINE_DIR}/contracts/webview/fixtures.json")
+
+

@@ -1,0 +1,80 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+# see FEATURE AREAS in dpkg-buildflags(1)
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all optimize=+lto
+
+include /usr/share/dpkg/architecture.mk
+
+# Used in the python3 binding (setup.py)
+export OPENCC_BUILD_DIR = obj-$(DEB_BUILD_GNU_TYPE)
+
+
+# Disable parallel build to circumvent some random build error
+# (needs further investigation)
+%:
+	dh $@ --buildsystem=cmake
+
+
+# Python build handled separately in pyproject.toml and setup.py
+BUILD_OPTIONS = \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)/ \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_OPENCC_JIEBA_PLUGIN=ON \
+    -DBUILD_PYTHON=OFF \
+    -DUSE_SYSTEM_DARTS=OFF \
+    -DUSE_SYSTEM_GTEST=ON \
+    -DUSE_SYSTEM_MARISA=ON \
+    -DUSE_SYSTEM_PYBIND11=ON \
+    -DUSE_SYSTEM_RAPIDJSON=ON \
+    -DUSE_SYSTEM_TCLAP=ON
+
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+BUILD_OPTIONS += -DBUILD_DOCUMENTATION=ON
+else
+BUILD_OPTIONS += -DBUILD_DOCUMENTATION=OFF
+endif
+
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+BUILD_OPTIONS += -DENABLE_GTEST=ON
+else
+BUILD_OPTIONS += -DENABLE_GTEST=OFF
+endif
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(BUILD_OPTIONS)
+
+execute_after_dh_auto_build:
+	dh_auto_build -O--buildsystem=pybuild -- -s pyproject
+
+execute_after_dh_auto_test:
+	# The testsuite needs the package to be installed.
+	# The python extension carries no RPATH on purpose (see patch 0009),
+	# so point it at the freshly built libopencc for the test run.
+	-LD_LIBRARY_PATH=$(CURDIR)/$(OPENCC_BUILD_DIR)/src$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH} \
+		dh_auto_test -O--buildsystem=pybuild -- -s pyproject
+
+execute_after_dh_auto_install:
+	dh_auto_install -O--buildsystem=pybuild -- -s pyproject
+	for i in debian/tmp/usr/lib/*/dist-packages/opencc/clib/; do \
+		mkdir -p $$i/share/; \
+		ln -sf ../../../../../../share/opencc $$i/share/; \
+	done
+
+execute_after_dh_auto_clean:
+	find . -name *.pyc -delete
+
+execute_after_dh_installdocs-indep:
+ifeq (,$(findstring nodoc,$(DEB_BUILD_OPTIONS)))
+	dh_doxygen --indep
+endif
+
+override_dh_installdocs:
+	dh_installdocs -plibopencc-doc --doc-main-package=opencc
+	dh_installdocs --remaining-packages
+
+override_dh_installchangelogs:
+	dh_installchangelogs -k NEWS.md

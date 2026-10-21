@@ -1,0 +1,250 @@
+{
+  "contract_version": 2,
+  "archive": "engine-assets-desktop.zip",
+  "manifest": "engine-assets-manifest.json",
+  "assets": [
+    {
+      "id": "main_dictionary",
+      "path": "msime.db",
+      "role": "mutable-copy",
+      "source": "dictionary",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "english_dictionary",
+      "path": "english.db",
+      "role": "mutable-copy",
+      "source": "dictionary",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "other_dictionary",
+      "path": "others.db",
+      "role": "resource",
+      "source": "dictionary",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "japanese_model",
+      "path": "dict_japanese.dat",
+      "role": "resource",
+      "source": "dictionary",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "japanese_notice",
+      "path": "mozc_dictionary_oss_README.txt",
+      "role": "notice",
+      "source": "dictionary",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "dictionary_manifest",
+      "path": "dictionary-manifest.json",
+      "role": "metadata",
+      "source": "dictionary",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "language_model",
+      "path": "sc.lm",
+      "role": "resource",
+      "source": "language-model/sc.lm",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "neural_model_desktop",
+      "path": "sentence-model-desktop.safetensors",
+      "role": "resource",
+      "source": "neural-model/sentence-model-desktop.safetensors",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "neural_model_keyboard",
+      "path": "sentence-model.safetensors",
+      "role": "resource",
+      "source": "neural-model/sentence-model.safetensors",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "notice_19",
+      "path": "licenses/chinese-ime-lm-NOTICE.md",
+      "role": "notice",
+      "source": "neural-model/NOTICE.md",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "pinyin_model",
+      "path": "dict_pinyin.dat",
+      "role": "resource",
+      "source": "googlepinyinime-rev/data/dict_pinyin.dat",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "translations",
+      "path": "custom_translations.txt",
+      "role": "resource",
+      "source": "dictionary/custom/translations.txt",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "helpcode_lantian",
+      "path": "helpcodes/helpcode.txt",
+      "role": "resource",
+      "source": "helpcode/helpcodes/helpcode.txt",
+      "profiles": [
+        "desktop"
+      ],
+      "schema": "lantian"
+    },
+    {
+      "id": "helpcode_ziranma",
+      "path": "helpcodes/zrm_helpcode_big_unique.txt",
+      "role": "resource",
+      "source": "helpcode/helpcodes/zrm_helpcode_big_unique.txt",
+      "profiles": [
+        "desktop"
+      ],
+      "schema": "ziranma"
+    },
+    {
+      "id": "helpcode_shouyou2_0",
+      "path": "helpcodes/shouyou2_0_helpcode.txt",
+      "role": "resource",
+      "source": "helpcode/helpcodes/shouyou2_0_helpcode.txt",
+      "profiles": [
+        "desktop"
+      ],
+      "schema": "shouyou2_0"
+    },
+    {
+      "id": "helpcode_shouyouplus",
+      "path": "helpcodes/shouyouplus_helpcode.txt",
+      "role": "resource",
+      "source": "helpcode/helpcodes/shouyouplus_helpcode.txt",
+      "profiles": [
+        "desktop"
+      ],
+      "schema": "shouyouplus"
+    },
+    {
+      "id": "helpcode_xiaohe",
+      "path": "helpcodes/xiaohe_helpcode.txt",
+      "role": "resource",
+      "source": "helpcode/helpcodes/xiaohe_helpcode.txt",
+      "profiles": [
+        "desktop"
+      ],
+      "schema": "xiaohe"
+    },
+    {
+      "id": "helpcode_jiajia",
+      "path": "helpcodes/jiajia_helpcode.txt",
+      "role": "resource",
+      "source": "helpcode/helpcodes/jiajia_helpcode.txt",
+      "profiles": [
+        "desktop"
+      ],
+      "schema": "jiajia"
+    },
+    {
+      "id": "notice_13",
+      "path": "licenses/googlepinyinime-LICENSE",
+      "role": "notice",
+      "source": "googlepinyinime-rev/LICENSE",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "notice_14",
+      "path": "licenses/helpcode-NOTICE.md",
+      "role": "notice",
+      "source": "helpcode/NOTICE.md",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "notice_15",
+      "path": "licenses/dictionary-NOTICE.md",
+      "role": "notice",
+      "source": "dictionary/NOTICE.md",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "notice_16",
+      "path": "licenses/Engine-NOTICE.md",
+      "role": "notice",
+      "source": "NOTICE.md",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "notice_17",
+      "path": "licenses/Engine-LICENSE",
+      "role": "notice",
+      "source": "LICENSE",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "notice_18",
+      "path": "licenses/libime-lm-NOTICE.md",
+      "role": "notice",
+      "source": "language-model/NOTICE.md",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "radical_decomposition",
+      "path": "radical/decomposition.txt",
+      "role": "resource",
+      "source": "radical/decomposition.txt",
+      "profiles": [
+        "desktop"
+      ]
+    },
+    {
+      "id": "user_journal",
+      "path": "msime_user.db",
+      "role": "user",
+      "profiles": []
+    },
+    {
+      "id": "pinyin_user_dictionary",
+      "path": "user_dict.dat",
+      "role": "user",
+      "profiles": []
+    }
+  ]
+}

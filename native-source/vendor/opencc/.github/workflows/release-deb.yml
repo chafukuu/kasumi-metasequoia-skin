@@ -1,0 +1,143 @@
+name: Debian Packages
+run-name: Debian Packages${{ !(startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') && ' (build only)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to upload the built packages to, for example ver.1.4.1. Leave empty to only build artifacts."
+        required: false
+        type: string
+  push:
+    tags:
+      - "ver.*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The packaging in packaging/debian/debian targets Debian
+  # unstable/experimental (debhelper compat 14, pybuild), which Ubuntu LTS
+  # runners cannot satisfy, so the build jobs run inside a debian:sid
+  # container on the matching runner architecture.
+  build-amd64:
+    runs-on: ubuntu-24.04
+    container: debian:sid
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential fakeroot ca-certificates git \
+            chrpath cmake debhelper doxygen googletest \
+            libmarisa-dev rapidjson-dev libtclap-dev \
+            dh-python pkg-kde-tools \
+            pybind11-dev python3-all-dev python3-pybind11 \
+            pybuild-plugin-pyproject python3-pytest python3-setuptools \
+            python3-wheel
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Build amd64 packages
+        env:
+          DIST_DIR: ${{ github.workspace }}/dist
+          BUILD_MODE: all
+        run: bash scripts/build-deb-packages.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-amd64
+          path: dist/*.deb
+
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    container: debian:sid
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential fakeroot ca-certificates git \
+            chrpath cmake debhelper doxygen googletest \
+            libmarisa-dev rapidjson-dev libtclap-dev \
+            dh-python pkg-kde-tools \
+            pybind11-dev python3-all-dev python3-pybind11 \
+            pybuild-plugin-pyproject python3-pytest python3-setuptools \
+            python3-wheel
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Build arm64 packages
+        env:
+          DIST_DIR: ${{ github.workspace }}/dist
+          BUILD_MODE: any-only
+        run: bash scripts/build-deb-packages.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-arm64
+          path: dist/*.deb
+
+  assemble:
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb-amd64
+          path: dist/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb-arm64
+          path: dist/
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION=$(dpkg-parsechangelog \
+            -l packaging/debian/debian/changelog -S version)
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble per-architecture zips with checksums
+        run: |
+          cd dist
+          version="${{ steps.version.outputs.value }}"
+          for arch in amd64 arm64; do
+            stage="deb-$arch-stage"
+            mkdir "$stage"
+            cp ./*_"$arch".deb "$stage"/
+            cp ./*_all.deb "$stage"/
+            (cd "$stage" && sha256sum ./*.deb > SHA256SUMS && \
+             zip "../opencc-$version-deb-$arch.zip" ./*.deb SHA256SUMS)
+            rm -r "$stage"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencc-deb-${{ steps.version.outputs.value }}
+          path: dist/opencc-*.zip
+
+      - name: Upload to GitHub release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.release_tag || github.ref_name }}"
+          for i in $(seq 1 30); do
+            gh release view "$tag" --json isDraft > /dev/null 2>&1 && break
+            echo "Waiting for release $tag to be created ($i/30)..."
+            sleep 10
+          done
+          gh release upload "$tag" \
+            dist/opencc-*-deb-*.zip \
+            --clobber

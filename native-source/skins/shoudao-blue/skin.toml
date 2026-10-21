@@ -1,0 +1,50 @@
+schema_version = 1
+id = "shoudao-blue"
+name = "首道-蓝"
+version = "1.0.0"
+description = "首道-蓝：典雅蓝白冷调，深色墨蓝浅色素白。圆角卡片布局，紫色序号标注。配色沉静克制，长时间输入护眼不累，适合日常办公与写作。"
+base = "willow_green"     
+
+[supports]
+layouts = ["horizontal", "vertical"]
+themes = ["dark", "light"]
+
+[candidate_window]
+min_width_dip = 180
+
+[candidate.light]
+surface = "#F4F3F1"        
+border = "#E7E6E1"
+accent = "#1B3B5C"         
+selected = "#1B3B5C"       
+hover = "#7D9BB940"
+text = "#050505"          
+number = "#9370DB"         
+translation = "#232424A6"
+show_selected_bar = false  
+
+[candidate.dark]
+surface = "#1E2A3E"
+border = "#5A7FAF35"
+accent = "#7FA8D0"
+selected = "#1E3D5E"      
+hover = "#7FA8D020"
+text = "#EDF2F7"
+number = "#9370DB"        
+translation = "#9FB6CC"
+
+[toolbar.light]
+background = "#E8F0F8"
+border = "#1B3B5C20"
+handle = "#1B3B5C"
+divider = "#1B3B5C15"
+icon = "#1B3B5C"
+hover = "#1B3B5C10"
+
+[toolbar.dark]
+background = "#162238"
+border = "#5A7FAF60"      # 微增强，勾勒工具栏
+handle = "#7FA8D0"
+divider = "#5A7FAF30"
+icon = "#C5D8EC"
+hover = "#7FA8D020" 

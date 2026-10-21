@@ -1,0 +1,344 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  lock:
+    name: Product inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      # The engine is vendored in-tree, so a plain checkout already carries the contracts this job
+      # compares against. opencc and cpp-pinyin are still submodules but nothing here builds.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the shared dictionary validator
+        run: python3 scripts/check-dictionary-contract.py
+      - name: Check product-lock contract
+        run: python3 scripts/check-product-lock-contract.py
+      # The voice activity detector is committed rather than downloaded, and it is executed inside
+      # the IME process. The engine's own voice.yml used to re-check its digest; that workflow left
+      # with the submodule, so the check moves here rather than disappearing.
+      - name: Check the committed voice model against its recorded digest
+        run: |
+          echo '1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3  engine/voice/assets/models/silero_vad.onnx' | sha256sum --check --strict
+      - name: Test rejection of changed or mismatched inputs
+        run: python3 -m unittest discover -s tests -p 'test_product_lock.py'
+      - name: Test local environment setup in a moved checkout
+        run: python3 -m unittest discover -s tests -p 'test_prepare_env.py'
+      - name: Test the automatic release CI gate
+        run: python3 -m unittest discover -s tests -p 'test_release_pr_ci.py'
+      - name: Read the reviewed lock
+        id: lock
+        run: python3 scripts/product_lock.py outputs --github-output "$GITHUB_OUTPUT"
+
+  windows:
+    name: Windows ${{ matrix.name }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x64
+            architecture: x64
+            triplet: x64-windows-static
+          - name: Win32
+            architecture: Win32
+            triplet: x86-windows-static
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Restore dependency binaries
+        id: vcpkg-cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          scope: tip-${{ matrix.triplet }}
+      - name: Install dependencies
+        shell: pwsh
+        working-directory: windows
+        run: vcpkg install --triplet ${{ matrix.triplet }}
+      - name: Save dependency binaries before compiling
+        if: steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key)
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}-complete
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S windows -B windows/build -A ${{ matrix.architecture }}
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
+      - name: Build
+        shell: pwsh
+        run: cmake --build windows/build --config Release --parallel
+      - name: Check the Release binary and symbols
+        shell: pwsh
+        run: ./scripts/ci/check-tsf-dll.ps1 -BuildDir 'windows/build'
+      - name: Test the wire contract on this architecture
+        run: ctest --no-tests=error --test-dir windows/build -C Release --output-on-failure
+
+      # Architecture-independent, so it runs once rather than on both matrix legs.
+      - name: Check the installer language file lands where ISCC looks
+        if: ${{ matrix.name == 'x64' }}
+        shell: pwsh
+        run: ./scripts/ci/check-inno-language.ps1
+
+  # MSIME-Linux's ci.yml already reasons about this: "the frontend layer had none -- and that is the
+  # layer that parses untrusted input", after an audit of the Windows frontend turned up a batch of
+  # races and null dereferences that the Debug build did not catch. Linux acted on that; this
+  # repository had no sanitizer coverage at all.
+  #
+  # Sanitizing the whole server would mean a sanitized Boost, curl and sqlite on a Windows runner.
+  # Instead the host-independent parsing and policy code builds as its own tiny target with
+  # no dependencies, which runs under ASan and UBSan on Linux in seconds. It covers less than a full
+  # sanitized build would; it covers it on every pull request.
+  sanitizers:
+    name: Sanitizers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Configure with AddressSanitizer and UndefinedBehaviorSanitizer
+        run: >
+          cmake -S server/tests/portable -B server/tests/portable/build
+          -DCMAKE_BUILD_TYPE=Debug -DMSIME_PORTABLE_TESTS_SANITIZE=ON
+      - name: Build
+        run: cmake --build server/tests/portable/build --parallel
+      - name: Test
+        working-directory: server/tests/portable/build
+        run: ctest --output-on-failure
+
+  server:
+    name: Server
+    needs: lock
+    runs-on: windows-2025
+    timeout-minutes: 90
+    # sccache caches individual MSVC compiles across runs so an incremental change recompiles only
+    # what it touched instead of the whole server + engine tree. It needs SCCACHE_GHA_ENABLED for
+    # every step that shells out to the compiler (configure probes it too, not just build).
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Restore dependency binaries
+        id: vcpkg-cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          scope: server-x64-windows-and-static-md
+      # The Visual Studio generator finds MSVC on its own; Ninja does not, so put cl.exe on PATH
+      # before configuring. Defaults to the x64 host/target, matching the build below.
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      - name: Verify direct MSVC fallback
+        shell: pwsh
+        run: ./scripts/ci/test-sccache-fallback.ps1
+      - name: Set up sccache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      - name: Install Boost
+        shell: pwsh
+        run: ./scripts/ci/install-boost.ps1
+      - name: Save Boost binaries before configuring
+        if: steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) && steps.vcpkg-cache.outputs.matched-key != format('{0}-boost', steps.vcpkg-cache.outputs.key)
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}-boost
+      # 刻意不叫 build：CMakeLists.txt 曾经写死 ${CMAKE_SOURCE_DIR}/build/vcpkg_installed，换任何别的名字都会链接失败。构建到别处才能保证这条不会悄悄退回去。
+      #
+      # Ninja Multi-Config instead of the Visual Studio generator: sccache plugs in through
+      # CMAKE_<LANG>_COMPILER_LAUNCHER, which CMake honours only for the Ninja and Makefile
+      # generators. "Multi-Config" keeps the --config Release / bin/Release layout the later steps
+      # (check-server-binaries.ps1, ctest -C Release) already depend on.
+      - name: Configure
+        shell: pwsh
+        run: |
+          $cmakeArgs = @(
+            '-S', 'server', '-B', 'server/build-release', '-G', 'Ninja Multi-Config',
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake",
+            '-DVCPKG_TARGET_TRIPLET=x64-windows'
+          )
+          $cmakeArgs += @(./scripts/ci/cmake-sccache-args.ps1 -SetupOutcome '${{ steps.sccache.outcome }}')
+          cmake @cmakeArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Save dependency binaries before compiling
+        if: steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key)
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}-complete
+      - name: Build
+        shell: pwsh
+        run: cmake --build server/build-release --config Release --parallel
+      - name: Report sccache hit rate
+        if: ${{ !cancelled() && steps.sccache.outcome == 'success' }}
+        continue-on-error: true
+        shell: pwsh
+        run: sccache --show-stats
+      - name: Check the Release binaries and symbols
+        shell: pwsh
+        run: ./scripts/ci/check-server-binaries.ps1 -BuildDir server/build-release/bin/Release
+      - name: Test with the product's exact data
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/ci/test-server.ps1 -ServerRoot server -StagingRoot "$env:RUNNER_TEMP/product-data" -BuildDir build-release
+
+  # The Server job builds the engine as a library with BUILD_TESTING off, so the engine's own suite
+  # only ever ran on developer machines. It covers behaviour server/tests cannot reach, such as the
+  # user journal's per-thread connections and the rule that closing it releases every cached
+  # handle into the data directory. Built standalone from engine/vcpkg.json, tested against the
+  # same locked dictionaries as the Server.
+  engine:
+    name: Engine
+    needs: lock
+    runs-on: windows-2025
+    timeout-minutes: 60
+    # Same sccache setup as the Server job. SCCACHE_IGNORE_SERVER_IO_ERROR lets a compile fall back
+    # to plain cl.exe when the sccache server is unreachable, so a GitHub cache outage costs time
+    # instead of failing this required check.
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore dependency binaries
+        id: vcpkg-cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          scope: engine-x64-windows
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      - name: Set up sccache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      # Keep Ninja Multi-Config: CMake ignores CMAKE_<LANG>_COMPILER_LAUNCHER under the Visual
+      # Studio generator, so switching back to -A x64 would silently disable sccache.
+      - name: Configure
+        shell: pwsh
+        run: |
+          $cmakeArgs = @(
+            '-S', 'engine', '-B', 'engine/build', '-G', 'Ninja Multi-Config',
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake",
+            '-DVCPKG_TARGET_TRIPLET=x64-windows', '-DBUILD_TESTING=ON'
+          )
+          $cmakeArgs += @(./scripts/ci/cmake-sccache-args.ps1 -SetupOutcome '${{ steps.sccache.outcome }}')
+          cmake @cmakeArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Save dependency binaries before compiling
+        if: steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key)
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.path }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}-complete
+      - name: Build
+        shell: pwsh
+        run: cmake --build engine/build --config Release --parallel
+      - name: Report sccache hit rate
+        if: ${{ !cancelled() && steps.sccache.outcome == 'success' }}
+        continue-on-error: true
+        shell: pwsh
+        run: sccache --show-stats
+      - name: Test with the product's exact data
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/ci/test-engine.ps1 -BuildDir engine/build -StagingRoot "$env:RUNNER_TEMP/product-data"
+
+  gui:
+    name: GUI framework
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check library ownership
+        run: python ui/scripts/check-boundary.py
+      - name: Configure
+        shell: pwsh
+        run: cmake -S ui -B ui/build -A x64
+      - name: Build
+        shell: pwsh
+        run: cmake --build ui/build --config Release --parallel
+      - name: Test
+        shell: pwsh
+        run: ctest --no-tests=error --test-dir ui/build -C Release --verbose --timeout 60
+
+  # External skins are plain data, so the checks are the manifest contract the Server catalog
+  # enforces plus the example's installer; both run against the example and the skins/ collection.
+  skins:
+    name: Skins
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - name: Validate the example manifests and referenced assets
+        working-directory: examples/skin-examples
+        run: python -m unittest discover -s tests -v
+      - name: Validate the skins collection against the same contract
+        working-directory: examples/skin-examples
+        env:
+          MSIME_SKINS_DIR: ../../skins
+        run: python -m unittest discover -s tests -v
+      - name: Test install, activation and repeated installation in a temporary user directory
+        working-directory: examples/skin-examples
+        run: ./tests/install.ps1
+
+  packaging:
+    name: Package contents
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test full and light package contents without registering or installing
+        run: ./installer/tests/package-files.ps1
+      - name: Test that the installer preserves user data on upgrade
+        run: ./installer/tests/preserve-user-data.ps1
+      - name: Check installer cloud choice and config preservation
+        run: python ./installer/tests/test_cloud_choice.py
+      - name: Test cloud choice with Inno Setup
+        run: ./installer/tests/cloud-choice.ps1
+      - name: Test that bundled skins back up changed user copies before overwriting
+        run: ./installer/tests/bundled-skins.ps1
+      - name: Test that upgrades keep the desktop neural model shipped by 0.9.x
+        run: ./installer/tests/retired-desktop-model.ps1
+      - name: Stop local packaging after failed component builds
+        run: ./installer/tests/build-failures.ps1
+      - name: Test local Server test entrypoints in a moved checkout
+        run: ./tests/server-test-entrypoints.ps1

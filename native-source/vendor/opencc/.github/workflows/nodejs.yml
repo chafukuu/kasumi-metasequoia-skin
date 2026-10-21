@@ -1,0 +1,235 @@
+name: Node.js
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Build the addon and prebuild assets with Bazel (the same path the npm
+  # release uses), then run the Node.js tests against the prebuild layout.
+  build-and-test:
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        # Supported Node.js versions on latest hosted runners
+        os: [ubuntu-latest, macos-latest]
+        node-version: [20, 22, 24, 25]
+        # LTS coverage on macOS 14 (ARM64)
+        include:
+          - os: macos-14
+            node-version: 24
+          - os: macos-15-intel
+            node-version: 24
+          - os: windows-2025-vs2026
+            node-version: 24
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Best-effort Defender exclusions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE" `
+            -ExclusionProcess "bazel.exe","bazelisk.exe","python.exe","cl.exe","link.exe"
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(bash scripts/compute-version.sh)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed version: $VERSION"
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Configure BuildBuddy
+        if: (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && runner.os != 'Windows'
+        shell: bash
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "${BUILDBUDDY_API_KEY}" ]; then
+            {
+              echo "build --config=buildbuddy"
+              echo "build --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+              echo "build --bes_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+            } >> .bazelrc.user
+            echo "BuildBuddy enabled."
+          else
+            echo "BUILDBUDDY_API_KEY not set; skipping BuildBuddy config."
+          fi
+      - run: npm ci --omit=optional
+      - name: Build Node.js prebuild with Bazel
+        shell: bash
+        run: ./scripts/build-node-prebuild-bazel.sh
+      - name: Verify Node.js prebuild layout
+        run: |
+          node -e "const fs=require('fs'); const path=require('path'); const dirs=fs.readdirSync('prebuilds',{withFileTypes:true}).filter((entry)=>entry.isDirectory()).map((entry)=>entry.name); if(!dirs.includes('assets')) throw new Error('missing prebuilds/assets'); const platformDirs=dirs.filter((name)=>name!=='assets'); if(platformDirs.length!==1) throw new Error('expected one platform prebuild directory, found '+platformDirs.join(',')); const addon=path.join('prebuilds', platformDirs[0], 'opencc.node'); if(!fs.existsSync(addon)) throw new Error('missing '+addon); console.log('Verified '+addon+' with shared assets');"
+      - name: Test
+        env:
+          PREBUILDS_ONLY: 1
+        run: npm test
+      - name: upload artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: opencc-${{ env.VERSION }}-nodejs-${{ matrix.os }}-node-${{ matrix.node-version }}
+          path: |
+            prebuilds/**
+            **/npm-debug.log
+
+  # Pack the main npm tarball plus the Bazel-built scoped binary package for
+  # the host platform, install both together, and smoke test — mirroring how
+  # a release install resolves the native addon on platforms with a prebuilt
+  # binary.
+  pack-install:
+    name: Install packed npm tarballs (${{ matrix.os }})
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-15-intel]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Configure BuildBuddy
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "${BUILDBUDDY_API_KEY}" ]; then
+            {
+              echo "build --config=buildbuddy"
+              echo "build --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+              echo "build --bes_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+            } >> .bazelrc.user
+            echo "BuildBuddy enabled."
+          else
+            echo "BUILDBUDDY_API_KEY not set; skipping BuildBuddy config."
+          fi
+      - run: npm ci --omit=optional
+      - name: Build Node.js prebuild with Bazel
+        shell: bash
+        run: ./scripts/build-node-prebuild-bazel.sh
+      - name: Pack npm tarballs
+        shell: bash
+        run: |
+          npm run prepare:scoped-packages
+          target="$(node -p "process.platform + '-' + process.arch")"
+          mkdir -p dist/npm-artifacts
+          npm pack --pack-destination dist/npm-artifacts
+          npm pack "dist/scoped-packages/@opencc/opencc-${target}" \
+            --pack-destination dist/npm-artifacts
+      - name: Install tarballs and smoke test
+        shell: bash
+        run: |
+          main_tarball="$(ls "$PWD"/dist/npm-artifacts/opencc-[0-9]*.tgz)"
+          scoped_tarball="$(ls "$PWD"/dist/npm-artifacts/opencc-opencc-*.tgz)"
+          install_dir="$(mktemp -d)"
+          cd "$install_dir"
+          npm init -y
+          npm install --omit=optional --foreground-scripts \
+            "$main_tarball" "$scoped_tarball"
+          node -e '
+            const assert = require("assert");
+            const OpenCC = require("opencc");
+            const converter = new OpenCC("s2t.json");
+            const converted = converter.convertSync("汉字");
+            assert.strictEqual(converted, "漢字");
+            console.log("Packed opencc converts 汉字 ->", converted);
+          '
+
+  # Install the packed npm tarball without any scoped binary package, so the
+  # Bazel source-build fallback in scripts/install.js is exercised exactly as
+  # it runs on platforms without a prebuilt binary: the addon is compiled
+  # from source and the dictionaries are regenerated into prebuilds/assets.
+  pack-source-install:
+    name: Bazel source build from npm tarball (${{ matrix.os }})
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-15-intel]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: npm ci --omit=optional
+      - name: Build prebuild assets
+        shell: bash
+        run: ./scripts/build-node-prebuild-bazel.sh
+      - name: Pack npm tarball
+        shell: bash
+        run: |
+          mkdir -p dist/npm-artifacts
+          npm pack --pack-destination dist/npm-artifacts
+      - name: Install tarball from source and smoke test
+        shell: bash
+        run: |
+          tarball="$(ls "$PWD"/dist/npm-artifacts/opencc-[0-9]*.tgz)"
+          target="$(node -p "process.platform + '-' + process.arch")"
+          install_dir="$(mktemp -d)"
+          cd "$install_dir"
+          npm init -y
+          npm install --omit=optional --foreground-scripts "$tarball"
+          test -f "node_modules/opencc/prebuilds/${target}/opencc.node"
+          node -e '
+            const assert = require("assert");
+            const OpenCC = require("opencc");
+            const converter = new OpenCC("s2t.json");
+            const converted = converter.convertSync("汉字");
+            assert.strictEqual(converted, "漢字");
+            console.log("Source-built opencc converts 汉字 ->", converted);
+          '
