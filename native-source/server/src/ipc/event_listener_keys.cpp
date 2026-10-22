@@ -20,6 +20,7 @@
 #include "utils/common_utils.h"
 #include "global/globals.h"
 #include "window/caret_state_indicator_policy.h"
+#include "window/candidate_typing_star_events.h"
 #include "utils/ime_utils.h"
 #include "config/ime_config.h"
 #include "session/session_factory.h"
@@ -515,6 +516,7 @@ bool ApplyCompositionEditKey(UINT keycode, WCHAR wch, UINT modifiers_down, bool 
         }
         raw.insert(raw.begin() + static_cast<std::ptrdiff_t>(composition.caret_position), input);
         ++composition.caret_position;
+        CandidateTypingStars::NotifyInserted();
         // Typing locks the newest selection (Rime's selected_before_editing):
         // Backspace must keep deleting these fresh characters instead of
         // retracting the selection out from under them. Caret moves never reach
@@ -1182,6 +1184,8 @@ void HandleImeKey(uint64_t client_id, uint64_t activation_epoch, uint64_t reques
         g_r_mode_original_session = g_inputSession;
         g_inputSession = CreateTemporaryJapaneseInputSession();
         g_r_mode_triggered = true;
+        // R is a visible, accepted prefix even though it is not engine raw.
+        CandidateTypingStars::NotifyInserted();
     }
 
     if (FanyImeIpc::HasEscapeCreatingWordShape(Global::Keycode, GlobalIme::composition.creating_word.active,
@@ -1239,6 +1243,15 @@ void HandleImeKey(uint64_t client_id, uint64_t activation_epoch, uint64_t reques
         is_japanese_long_vowel || is_date_time_input_key || is_v_mode_input_key;
     const bool should_forward_key_to_session = !is_commit_with_highlighted_candidate_punctuation && !is_selection_key &&
                                                !is_paging_key && !is_composition_edit_key;
+
+    // Editing, navigation and selection end a consecutive insertion pair.
+    // Accepted input punctuation (including V-mode operators) remains an
+    // insertion even when its physical key is also a configured paging key.
+    if (!is_composition_edit_key || Global::Keycode == VK_BACK || Global::Keycode == VK_DELETE ||
+        Global::Keycode == VK_LEFT || Global::Keycode == VK_RIGHT)
+    {
+        CandidateTypingStars::BreakSequence();
+    }
 
     // Punctuation needs a synchronous highlighted-candidate response on the TSF pipe.
     // Reply before cloud-query and candidate recomputation work so the TSF-side

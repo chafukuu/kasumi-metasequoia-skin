@@ -25,6 +25,7 @@
 #include "ipc/event_listener.h"
 #include "window/caret_state_indicator.h"
 #include "window/caret_state_indicator_policy.h"
+#include "window/candidate_typing_star_events.h"
 #include "utils/ime_utils.h"
 #include "cloud/cloud_ime.h"
 #include "cloud/cloud_translation.h"
@@ -804,6 +805,7 @@ void PushUiLessCandidatesToOwner()
 
 void ClearState()
 {
+    CandidateTypingStars::Reset();
     const auto r_mode_original_session = g_r_mode_original_session;
     ClearSpecialModeTriggers();
     ClearCandidateUiOwner();

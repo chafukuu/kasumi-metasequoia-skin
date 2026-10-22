@@ -19,7 +19,9 @@ class CandidatePresenter
     void ShowFromGlobalState();
     void ShowFromGlobalState(POINT caret);
     void Hide();
-    void Present();
+    bool Present();
+    // Candidate-content dedup still delivers decoration events without layout.
+    void PresentTypedStarsFromInput();
     // Re-emit the current numeric placement/first-row edges without repainting.
     void TraceCurrentPlacement();
     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam);
@@ -32,6 +34,7 @@ class CandidatePresenter
 
     void RebuildScene();
     void ApplySkin();
+    bool ConsumeTypedStarInput();
     // Returns the generation of the snapshot that was actually rendered, so the caller can echo it
     // back to Global::rendered_candidate_page_generation once the paint is on screen.
     std::uint64_t FillItemsFromUi();

@@ -2,14 +2,14 @@
 
 ## 下载哪个文件
 
-打开 [v0.5.3 发布页](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/tag/v0.5.3)，下载：
+打开 [v0.5.6 发布页](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/tag/v0.5.6)，下载：
 
-`kasumi-metasequoia-skin-v0.5.3-windows-x64.zip`
+`kasumi-metasequoia-skin-v0.5.6-windows-x64.zip`
 
 同时提供 `SHA256SUMS.txt`。在 PowerShell 中可用以下命令核对下载文件：
 
 ```powershell
-Get-FileHash .\kasumi-metasequoia-skin-v0.5.3-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\kasumi-metasequoia-skin-v0.5.6-windows-x64.zip -Algorithm SHA256
 ```
 
 结果应与校验文件相同。GitHub 自动提供的 Source code (zip/tar.gz) 是源码包，不包含安装用的 Server 二进制。
@@ -35,6 +35,12 @@ Get-FileHash .\kasumi-metasequoia-skin-v0.5.3-windows-x64.zip -Algorithm SHA256
 默认安装皮肤 `kasumi-adaptive`、字号 15、每页 7 项、横排单行并隐藏预编辑行。超长候选只在显示时省略，实际提交内容保持完整。
 
 本版已由输入法本体绘制全部图形，无需另外启动 `KasumiBandOverlay`、裁切器或 LiveSD。旧伴随程序存在时，安装器会在验证其身份后请求正常退出。
+
+v0.5.6 保留原生吉他摆动，并将打字弹出的星星设为蓝色 : 品红 : 黄色 = 2 : 1 : 1。蓝色星星只替换颜色，轮廓、尺寸与透明边缘不变。每两个接受字符弹出两颗星；删除或编辑会清除未满两个字符的计数，已经弹出的星星继续自然消失。本版还修复动画调度和图片缓存反复解码引起的卡顿。
+
+本机已安装并验证对应的 v0.5.6 产品。本便携包的 15 项静态及隔离目录验证通过，覆盖 Windows PowerShell 5.1 / PowerShell 7 的语法、升级与重复安装计划、恢复计划，以及清单和篡改拒绝检查；所有计划均未改变模拟目录。尚未实际执行本便携包的安装与恢复，也未在全新电脑完成完整演练。
+
+详细验证范围见 `docs/验证记录.md`，星星参数和图片替换约束见 `docs/星星参数与图片接口.md`。
 
 ## 只查看安装计划
 

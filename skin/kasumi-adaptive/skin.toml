@@ -1,7 +1,7 @@
 schema_version = 2
 id = "kasumi-adaptive"
 name = "Kasumi Adaptive"
-version = "0.5.3"
+version = "0.5.6"
 author = "Kasumi"
 description = "Fixed artwork at 0.75 of v0.5.2; font 15, right portrait 90% and raised 10 DIP. Native item edges drive frets."
 base = "canvas"
@@ -67,8 +67,8 @@ bottom = 0
 left = 0
 right = 0
 
-# No [[candidate_window.decorations]] here: direct-source mode owns every
-# artwork pixel; the native layer draws text and its synchronized separators.
+# The v0.5.4 foreground decoration owns only the left guitar.
+# Native candidate layout, text and synchronized separators remain unchanged.
 
 [candidate.light]
 surface = "transparent"
@@ -105,3 +105,55 @@ preedit_divider = "transparent"
 [license]
 code = "MIT"
 assets = "User-provided artwork"
+
+
+# Independent transparent APNG; zero measurement and native click-through front layer.
+[[candidate_window.decorations]]
+image = "assets/guitar-swing.png"
+anchor = "top-left"
+offset_x_dip = -3.8011049723756907
+offset_y_dip = -57.727900552486176
+width_dip = 170.5745856353591
+height_dip = 139.21546961325967
+z_index = 2
+
+
+# Native, event-driven foreground particles; no layout participation.
+[candidate_window.typed_stars]
+enabled = true
+yellow_image = "assets/star_y.png"
+pink_image = "assets/star_m.png"
+blue_image = "assets/star_b.png"
+origin_x_dip = 66.51933701657458
+origin_y_dip = 22.570441988950278
+min_x_dip = 8
+max_x_dip = 107
+min_y_dip = -100
+max_y_dip = 132
+
+# Image width stays proportional; 19-23 DIP is larger than the first 14-18 DIP draft.
+width_min_dip = 19
+width_max_dip = 23
+
+# Rise is measured from the guitar origin. End Y is relative to the card top.
+# About one visible candidate-ribbon thickness below its bottom, including fade-out.
+rise_min_dip = 24
+rise_max_dip = 38
+end_x_min_dip = 18
+end_x_max_dip = 94
+end_y_min_dip = 96
+end_y_max_dip = 108
+pair_separation_dip = 22
+
+duration_min_ms = 1200
+duration_max_ms = 1450
+fade_in_min_ms = 90
+fade_in_max_ms = 130
+fade_out_min_ms = 260
+fade_out_max_ms = 360
+
+# Rotation at birth and total rotation during the flight.
+rotation_min_deg = -24
+rotation_max_deg = 24
+spin_min_deg = -70
+spin_max_deg = 70

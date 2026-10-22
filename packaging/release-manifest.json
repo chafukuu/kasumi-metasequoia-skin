@@ -2,30 +2,37 @@
   "schemaVersion": 1,
   "package": "kasumi-metasequoia-skin",
   "displayName": "Kasumi Adaptive for Metasequoia IME 0.11.1",
-  "version": "0.5.3",
-  "createdUtc": "2026-10-21T08:49:20Z",
+  "version": "0.5.6",
+  "createdUtc": "2026-10-22T16:57:12Z",
   "minimumImeVersion": "0.11.1",
   "native": {
     "path": "native/MetasequoiaImeServer.exe",
-    "size": 10249728,
-    "sha256": "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C",
+    "size": 10306560,
+    "sha256": "143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E",
     "helperRequired": false
   },
   "skin": {
     "id": "kasumi-adaptive",
-    "version": "0.5.3",
+    "version": "0.5.6",
     "directory": "skin/kasumi-adaptive",
     "helperRequired": false,
     "bands": "native",
     "features": [
       "band_artwork",
       "item_separators",
-      "horizontal_single_line"
+      "horizontal_single_line",
+      "native_guitar_apng",
+      "native_typed_stars",
+      "blue_magenta_yellow_2_1_1",
+      "edit_counter_reset",
+      "animation_scheduler_cache_fix"
     ]
   },
   "compatibleInstalledServerSha256": [
     "448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3",
-    "C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA"
+    "C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA",
+    "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C",
+    "8843586A53876C6F626995014D8045DCB800329CBEB1F23A5DDC3DE9FF3FF5DC"
   ],
   "config": {
     "mergeOnly": true,
@@ -43,8 +50,8 @@
   "files": [
     {
       "path": "native/MetasequoiaImeServer.exe",
-      "size": 10249728,
-      "sha256": "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C"
+      "size": 10306560,
+      "sha256": "143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E"
     },
     {
       "path": "skin/kasumi-adaptive/assets/band-display.png",
@@ -62,14 +69,19 @@
       "sha256": "2041E3754BDF9EA260962EA7398108E7BD1F24F3AF677A4AD2049E5E3FD4164A"
     },
     {
+      "path": "skin/kasumi-adaptive/assets/guitar-swing.png",
+      "size": 2870063,
+      "sha256": "62C7B40435C2B41FED3D60C63913B53ACC0FFEE1825CCA99076EF4E0491744CF"
+    },
+    {
       "path": "skin/kasumi-adaptive/assets/livesd-idle.png",
       "size": 1186068,
       "sha256": "CB784902EE323E741E63012E56C9C61CF3DD81074D15198646BC72EB6322B764"
     },
     {
       "path": "skin/kasumi-adaptive/assets/native-band-background.png",
-      "size": 409463,
-      "sha256": "EDBC69B8C487CAE4BF7746CCD7D5E11FAEED53053B10C50F8C26171AE023E4FA"
+      "size": 350031,
+      "sha256": "446DD3738979104809D80891C5C54EBC63CCBF006E0181AE27A6009AC1DFA5F3"
     },
     {
       "path": "skin/kasumi-adaptive/assets/native-band-foreground.png",
@@ -107,6 +119,11 @@
       "sha256": "33CC7E96E135466FDFE66071DE35706015037D472A7A41DD0DA72FE4E83410DD"
     },
     {
+      "path": "skin/kasumi-adaptive/assets/star_b.png",
+      "size": 9194,
+      "sha256": "E176B9E3A1E34E64336AFFB271A7017C52B25DE50A935A55CD8335DB342E46AD"
+    },
+    {
       "path": "skin/kasumi-adaptive/assets/star_m.png",
       "size": 9221,
       "sha256": "6716AD2490DC58F9FCFBC585D71266C14AACC53755AAFCFB946ECA326BD8E247"
@@ -128,8 +145,8 @@
     },
     {
       "path": "skin/kasumi-adaptive/skin.toml",
-      "size": 2866,
-      "sha256": "BB3B8F30FE53C5F5724996B690C4843B83DA5537B6AF6B2ADCFE6D17004E4F17"
+      "size": 4274,
+      "sha256": "A5AA206ED7DA1B982E7703644B7ABAC86C9CD2E7B2CE4B647DE4002F3F422C0C"
     }
   ]
 }

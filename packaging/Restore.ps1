@@ -66,12 +66,16 @@ $script:ServerFileName = 'MetasequoiaImeServer.exe'
 $script:WatchdogFileName = 'MetasequoiaImeWatchdog.exe'
 $script:AuxPipeName = 'FanyImeAuxNamedPipe'
 $script:PackageId = 'kasumi-metasequoia-skin'
-$script:FinalServerSha256 = 'F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C'
+$script:FinalServerSha256 = '143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E'
 $script:OfficialServerSha256 = '448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3'
 $script:LegacyDevServerSha256 = 'C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA'
+$script:PreviousV053V054ServerSha256 = 'F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C'
+$script:PreviousV055ServerSha256 = '8843586A53876C6F626995014D8045DCB800329CBEB1F23A5DDC3DE9FF3FF5DC'
 $script:AllowedServerHashes = @(
     $script:OfficialServerSha256,
     $script:LegacyDevServerSha256,
+    $script:PreviousV053V054ServerSha256,
+    $script:PreviousV055ServerSha256,
     $script:FinalServerSha256
 )
 $script:Utf8NoBom = [Text.UTF8Encoding]::new($false, $false)

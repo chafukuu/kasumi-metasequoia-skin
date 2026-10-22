@@ -1,5 +1,8 @@
 {
-  "version": "0.5.3",
+  "version": "0.5.6",
+  "verifiedLocalDate": "2026-10-23",
+  "releaseTag": "v0.5.6",
+  "releaseAsset": "kasumi-metasequoia-skin-v0.5.6-windows-x64.zip",
   "upstream": "https://github.com/metasequoiaime/msime-windows",
   "baseTag": "v0.11.1",
   "baseCommit": "dd018f79858314ed542a47c528608752b13bd261",
@@ -7,12 +10,82 @@
     "cpp-pinyin": "e4dd8310e3bb6b8ac8edc42f2cbd80be92586a8e",
     "opencc": "8cf737a4e193db27d675b2ce9867d84aace33745"
   },
-  "nativeSha256": "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C",
+  "nativeSha256": "143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E",
+  "nativePatch": {
+    "path": "patches/kasumi-native-v056.patch",
+    "sha256": "40029E415B302B9C4F53D00A1EE5812ADAB9FBAAD62FF53B1E67B8ADC9C9DFBA",
+    "productionSourceInputsMatched": 342
+  },
   "sourceImageSha256": "c2c798cc2896c3c23a09ed24db5c926280616cda380d6aba6098ec0a499b25c4",
   "nativeUiAccess": false,
   "runtimeHelperRequired": false,
-  "visualAcceptance": "2026-10-21 用户确认：已同步，显示正常",
+  "visualAcceptance": "2026-10-23 用户反馈：效果不错",
+  "liveVisualVerified": false,
+  "liveVisualFrameRateMeasured": false,
+  "features": {
+    "guitarSwingDegrees": [-8, 8],
+    "guitarSwingPeriodMs": 1500,
+    "acceptedCharactersPerBurst": 2,
+    "starsPerBurst": 2,
+    "editingPreservesLiveStars": true,
+    "editingClearsPendingPairOnly": true,
+    "trueCompositionEndResetsState": true,
+    "starColorOrder": ["blue", "magenta", "yellow"],
+    "starColorRatio": [2, 1, 1],
+    "starColorSelection": "shuffled bags of blue, blue, magenta, yellow",
+    "legacyTwoColorSkinSupported": true,
+    "motionParametersUnchangedFrom": "0.5.5"
+  },
+  "blueAsset": {
+    "size": [114, 136],
+    "recolor": "(R,G,B,A) -> (G,B,R,A)",
+    "alphaByteIdentical": true,
+    "sourceSha256": "6716AD2490DC58F9FCFBC585D71266C14AACC53755AAFCFB946ECA326BD8E247",
+    "blueSha256": "E176B9E3A1E34E64336AFFB271A7017C52B25DE50A935A55CD8335DB342E46AD"
+  },
+  "build": {
+    "passed": true,
+    "steps": 448,
+    "independentV056BuildDirectory": true,
+    "releaseObjectsPresentBeforeBuild": false,
+    "preexistingObjectsReused": false,
+    "existingVcpkgBinariesReused": true
+  },
   "tests": {
+    "candidateLayout": "32/32",
+    "nativeParserFixtures": "12/12",
+    "typingInput": {"passed": true, "completed": true, "checks": 18},
+    "particleModel": {"passed": true, "completed": true, "checks": 24},
+    "animationScheduler": {"passed": true, "completed": true},
+    "powerShellAstChecks": 15,
+    "installedSkinFilesMatched": 19,
+    "allExistingArtworkUnchanged": true,
+    "candidateLayoutChanged": false,
+    "inputSettingsChanged": false,
+    "runtimeDependenciesChanged": false
+  },
+  "healthChecks": [
+    {"phase": "deployment", "observedSeconds": 30, "endpointChecks": 14, "crashEvents": 0, "healthy": true},
+    {"phase": "installed-reverification", "observedSeconds": 30, "endpointChecks": 15, "crashEvents": 0, "healthy": true}
+  ],
+  "portablePackageVerification": {
+    "passed": true,
+    "checks": 15,
+    "powerShellEngines": ["Windows PowerShell 5.1", "PowerShell 7"],
+    "payloadFiles": 20,
+    "payloadBytes": 18509863,
+    "manifestSha256": "B9E2C0112BF5C10E722A57ADBEC41A5C112DD61ADF0D0C5ABF4126E9FAC26A72",
+    "upgradeAndNoopWhatIfPassed": true,
+    "restoreListAndWhatIfPassed": true,
+    "tamperedBackupRejected": true,
+    "unknownServerRejected": true,
+    "sameSizeBlueStarTamperRejected": true,
+    "payloadSizeTamperRejected": true,
+    "whatIfMockTreesUnchanged": true,
+    "realInstallExecuted": false,
+    "realRestoreExecuted": false
+  },
+  "historicalV053Tests": {
     "candidateLayout": "36/36",
     "catalogAndGeometry": "13/13",
     "crossTranslationUnitCycles": 1000,
@@ -20,7 +93,10 @@
     "assetLayerChecks": "79/79"
   },
   "limits": [
-    "Portable installer was reviewed and mock-tested; no fresh-machine install or induced-failure rollback rehearsal.",
+    "No fresh-machine portable install, full restore or induced-failure rollback rehearsal.",
+    "liveVisualVerified remains false; no measured live IME visual frame rate or constant 60 FPS claim.",
+    "Animation scheduler smoke tests use Win32 message-only and fully transparent paint windows; no installed IME or Direct2D fault injection.",
+    "Private configuration, deployment backups and machine-specific install logs are not published.",
     "Earlier complete upstream suite: 747/756 passed, nine unrelated existing data/path/ranking failures; two Japanese tests skipped via early return."
   ]
 }

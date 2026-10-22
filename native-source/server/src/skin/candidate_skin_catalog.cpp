@@ -559,6 +559,86 @@ bool ReadBandArtwork(const toml::node *node, std::optional<BandArtwork> &out)
     return true;
 }
 
+bool ReadTypedStars(const toml::node *node, std::optional<TypedStars> &out)
+{
+    if (!node)
+        return true;
+    const auto *table = node->as_table();
+    if (!table)
+        return false;
+    if (const auto *enabled = table->get("enabled"))
+    {
+        const auto *flag = enabled->as_boolean();
+        if (!flag)
+            return false;
+        if (!flag->get())
+        {
+            out.reset();
+            return true;
+        }
+    }
+    TypedStars value;
+    const auto readPng = [table](const char *key, std::string &path) {
+        if (!table->contains(key) || !ReadResource(*table, key, path))
+            return false;
+        auto extension = std::filesystem::u8path(path).extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return extension == ".png";
+    };
+    if (!readPng("yellow_image", value.yellowImage) || !readPng("pink_image", value.pinkImage) ||
+        (table->contains("blue_image") && !readPng("blue_image", value.blueImage)) ||
+        !ReadSignedNumber(*table, "origin_x_dip", 2000.0, value.originXDip) ||
+        !ReadSignedNumber(*table, "origin_y_dip", 2000.0, value.originYDip) ||
+        !ReadSignedNumber(*table, "min_x_dip", 2000.0, value.minXDip) ||
+        !ReadSignedNumber(*table, "max_x_dip", 2000.0, value.maxXDip) ||
+        !ReadSignedNumber(*table, "min_y_dip", 2000.0, value.minYDip) ||
+        !ReadSignedNumber(*table, "max_y_dip", 2000.0, value.maxYDip))
+        return false;
+    const std::pair<const char *, double TypedStars::*> parameters[] = {
+        {"width_min_dip", &TypedStars::widthMinDip},
+        {"width_max_dip", &TypedStars::widthMaxDip},
+        {"rise_min_dip", &TypedStars::riseMinDip},
+        {"rise_max_dip", &TypedStars::riseMaxDip},
+        {"end_x_min_dip", &TypedStars::endXMinDip},
+        {"end_x_max_dip", &TypedStars::endXMaxDip},
+        {"end_y_min_dip", &TypedStars::endYMinDip},
+        {"end_y_max_dip", &TypedStars::endYMaxDip},
+        {"duration_min_ms", &TypedStars::durationMinMs},
+        {"duration_max_ms", &TypedStars::durationMaxMs},
+        {"fade_in_min_ms", &TypedStars::fadeInMinMs},
+        {"fade_in_max_ms", &TypedStars::fadeInMaxMs},
+        {"fade_out_min_ms", &TypedStars::fadeOutMinMs},
+        {"fade_out_max_ms", &TypedStars::fadeOutMaxMs},
+        {"rotation_min_deg", &TypedStars::rotationMinDeg},
+        {"rotation_max_deg", &TypedStars::rotationMaxDeg},
+        {"spin_min_deg", &TypedStars::spinMinDeg},
+        {"spin_max_deg", &TypedStars::spinMaxDeg},
+        {"pair_separation_dip", &TypedStars::pairSeparationDip}};
+    for (const auto &parameter : parameters)
+        if (!ReadSignedNumber(*table, parameter.first, 10000.0, value.*parameter.second))
+            return false;
+    const auto range = [](double low, double high, double minimum, double maximum) {
+        return low >= minimum && high >= low && high <= maximum;
+    };
+    if (value.maxXDip - value.minXDip < 40.0 || value.maxYDip - value.minYDip < 80.0 ||
+        !range(value.widthMinDip, value.widthMaxDip, 1.0, 128.0) ||
+        !range(value.riseMinDip, value.riseMaxDip, 1.0, 1000.0) ||
+        !range(value.endXMinDip, value.endXMaxDip, value.minXDip, value.maxXDip) ||
+        !range(value.endYMinDip, value.endYMaxDip, value.originYDip, value.maxYDip) ||
+        !range(value.durationMinMs, value.durationMaxMs, 200.0, 5000.0) ||
+        !range(value.fadeInMinMs, value.fadeInMaxMs, 1.0, value.durationMinMs) ||
+        !range(value.fadeOutMinMs, value.fadeOutMaxMs, 1.0, value.durationMinMs) ||
+        value.fadeInMaxMs + value.fadeOutMaxMs >= value.durationMinMs ||
+        !range(value.rotationMinDeg, value.rotationMaxDeg, -3600.0, 3600.0) ||
+        !range(value.spinMinDeg, value.spinMaxDeg, -3600.0, 3600.0) || value.pairSeparationDip <= 0.0 ||
+        value.pairSeparationDip > value.endXMaxDip - value.endXMinDip || value.originXDip <= value.minXDip ||
+        value.originXDip >= value.maxXDip || value.originYDip - value.riseMaxDip <= value.minYDip)
+        return false;
+    out = std::move(value);
+    return true;
+}
+
 // 外部皮肤与内置皮肤清单共用的外观键：[candidate_window] 里的圆角、线宽、阴影与版式（含 horizontal /
 // vertical 子表），[candidate.*] 配色，[toolbar] 配色与圆角。只覆盖写了的键，所以内置清单可以叠在出厂外观上读。
 bool ReadLook(const toml::table &root, Package &package, std::string *error)
@@ -1055,6 +1135,12 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
         }
         if (package.schemaVersion >= 2)
         {
+            if (!ReadTypedStars(window->get("typed_stars"), package.typedStars))
+            {
+                SetError(error, "candidate_window.typed_stars requires relative PNG images, finite ordered "
+                                "size/trajectory/time ranges, and bounds containing the emission origin");
+                return std::nullopt;
+            }
             if (const toml::node *borderImageNode = window->get("border_image"))
             {
                 const auto *borderImageTable = borderImageNode->as_table();
@@ -1258,6 +1344,20 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
             {
                 SetError(error, "找不到 candidate_window.decorations.image 文件");
                 return std::nullopt;
+            }
+        }
+        if (package.typedStars)
+        {
+            for (const auto &path :
+                 {package.typedStars->yellowImage, package.typedStars->pinkImage, package.typedStars->blueImage})
+            {
+                if (path.empty())
+                    continue;
+                if (!std::filesystem::is_regular_file(directory / std::filesystem::u8path(path), ec))
+                {
+                    SetError(error, "candidate_window.typed_stars image file was not found");
+                    return std::nullopt;
+                }
             }
         }
         AdaptSharedBase(package);

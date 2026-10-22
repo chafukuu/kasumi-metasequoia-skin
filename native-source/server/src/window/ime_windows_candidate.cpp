@@ -215,6 +215,8 @@ LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARA
             // honest even though nothing was repainted. Without it a digit/space selection would wait
             // out the full timeout on content that is already visible.
             Global::PublishRenderedCandidatePageGeneration(candidatePage->generation);
+            if (IsCandidateHostPaintedVisible(hwnd))
+                CandidatePresenter::Instance().PresentTypedStarsFromInput();
             CandidatePresenter::Instance().TraceCurrentPlacement();
             CAND_DIAG_LOGF(L"candidate-frame path=dedup page_gen={}", candidatePage->generation);
             return 0;

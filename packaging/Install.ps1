@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Install the portable Kasumi (v0.5.3) native skin package for Metasequoia IME 0.11.1.
+    Install the portable Kasumi (v0.5.6) native skin package for Metasequoia IME 0.11.1.
 
 .DESCRIPTION
     - Verifies release-manifest.json and every package file before touching the
@@ -61,18 +61,22 @@ $ProgressPreference = 'SilentlyContinue'
 $script:PackageRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $script:PackageId = 'kasumi-metasequoia-skin'
 $script:SkinId = 'kasumi-adaptive'
-$script:PackageVersion = '0.5.3'
+$script:PackageVersion = '0.5.6'
 $script:ImeVersion = '0.11.1'
 $script:ServerFileName = 'MetasequoiaImeServer.exe'
 $script:WatchdogFileName = 'MetasequoiaImeWatchdog.exe'
 $script:AuxPipeName = 'FanyImeAuxNamedPipe'
 $script:OverlayStopEventName = 'Local\KasumiBandOverlay-stop-v1'
-$script:FinalServerSha256 = 'F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C'
+$script:FinalServerSha256 = '143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E'
 $script:OfficialServerSha256 = '448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3'
 $script:LegacyDevServerSha256 = 'C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA'
+$script:PreviousV053V054ServerSha256 = 'F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C'
+$script:PreviousV055ServerSha256 = '8843586A53876C6F626995014D8045DCB800329CBEB1F23A5DDC3DE9FF3FF5DC'
 $script:AllowedInstalledServerHashes = @(
     $script:OfficialServerSha256,
     $script:LegacyDevServerSha256,
+    $script:PreviousV053V054ServerSha256,
+    $script:PreviousV055ServerSha256,
     $script:FinalServerSha256
 )
 $script:CriticalPackageFiles = @(
@@ -80,7 +84,11 @@ $script:CriticalPackageFiles = @(
     'skin/kasumi-adaptive/skin.toml',
     'skin/kasumi-adaptive/assets/native-band-background.png',
     'skin/kasumi-adaptive/assets/native-band-foreground.png',
-    'skin/kasumi-adaptive/assets/source-longest.png'
+    'skin/kasumi-adaptive/assets/source-longest.png',
+    'skin/kasumi-adaptive/assets/guitar-swing.png',
+    'skin/kasumi-adaptive/assets/star_b.png',
+    'skin/kasumi-adaptive/assets/star_m.png',
+    'skin/kasumi-adaptive/assets/star_y.png'
 )
 $script:Utf8Strict = [Text.UTF8Encoding]::new($false, $true)
 $script:Utf8NoBom = [Text.UTF8Encoding]::new($false, $false)
@@ -411,17 +419,23 @@ function Read-ReleaseManifest {
         '[candidate_window.band_artwork]',
         '[candidate_window.item_separators]',
         'assets/native-band-background.png',
-        'assets/native-band-foreground.png'
+        'assets/native-band-foreground.png',
+        '[candidate_window.typed_stars]',
+        'image = "assets/guitar-swing.png"',
+        'yellow_image = "assets/star_y.png"',
+        'pink_image = "assets/star_m.png"',
+        'blue_image = "assets/star_b.png"'
     )) {
         if (-not $tomlText.Contains($requiredText)) {
-            throw "skin.toml is missing required v0.5.3 content: $requiredText"
+            throw "skin.toml is missing required v0.5.6 content: $requiredText"
         }
     }
     if (-not [regex]::IsMatch($tomlText, '(?m)^[ \t]*single_line[ \t]*=[ \t]*true[ \t]*(?:#.*)?\r?$')) {
         throw 'skin.toml does not enable horizontal single_line.'
     }
-    if ([regex]::IsMatch($tomlText, '(?m)^[ \t]*\[\[\s*candidate_window\s*\.\s*decorations\s*\]\]')) {
-        throw 'skin.toml still declares [[candidate_window.decorations]]; this package requires native-only artwork.'
+    $decorationMatches = [regex]::Matches($tomlText, '(?m)^[ \t]*\[\[\s*candidate_window\s*\.\s*decorations\s*\]\]')
+    if ($decorationMatches.Count -ne 1) {
+        throw 'skin.toml must declare exactly one native guitar decoration.'
     }
 
     return [pscustomobject]@{

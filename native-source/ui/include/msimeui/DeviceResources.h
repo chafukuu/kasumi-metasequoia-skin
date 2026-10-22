@@ -206,7 +206,8 @@ class DeviceResources
     void RememberStillImage(const std::wstring &filePath);
     void TrimAnimatedBitmaps(size_t incoming);
 
-    static constexpr size_t kMaxCachedBitmaps = 4;
+    // Keep a small multi-image scene resident instead of decoding its still images every frame.
+    static constexpr size_t kMaxCachedBitmaps = 8;
     static constexpr size_t kDefaultAnimatedBitmapBudget = 64ULL * 1024 * 1024;
     static constexpr size_t kMaxRememberedStillImages = 64;
     static constexpr size_t kMaxCachedSvgBitmaps = 96;

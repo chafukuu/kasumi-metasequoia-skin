@@ -10,6 +10,7 @@
 #include "msimeui/Layout.h"
 
 #include <filesystem>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -17,6 +18,7 @@
 #include <vector>
 
 class CandidateSkinOverlay;
+class CandidateTypedStarOverlay;
 
 // 卷轴展开皮肤在候选行右端的展开按钮：收起时画“∨”，展开时画“∧”。按钮贴在槽位的右上角，
 // 竖直位置由外边距对齐到首行中间。
@@ -123,6 +125,11 @@ class CandidateExpandBody : public msimeui::Panel
 class CandidateSkinScene
 {
   public:
+    using EffectClock = msimeui::DeviceResources::AnimationClock;
+    void SetTypedStarTime(EffectClock::time_point time);
+    void EmitTypedStarPairs(std::uint64_t count, EffectClock::time_point time);
+    void ResetTypedStars();
+    std::optional<EffectClock::time_point> NextTypedStarFrameDeadline() const;
     // 套一次皮肤需要的全部输入。
     struct Settings
     {
@@ -228,6 +235,10 @@ class CandidateSkinScene
     {
         return expandBody_;
     }
+    const std::shared_ptr<CandidateTypedStarOverlay> &TypedStarOverlay() const
+    {
+        return typedStarOverlay_;
+    }
 
   private:
     void Build(bool horizontal, bool pageArrows, bool expandPanel);
@@ -245,6 +256,7 @@ class CandidateSkinScene
     std::shared_ptr<msimeui::Grid> overlayGrid_;
     std::shared_ptr<CandidateSkinOverlay> skinOverlayBack_;
     std::shared_ptr<CandidateSkinOverlay> skinOverlayFront_;
+    std::shared_ptr<CandidateTypedStarOverlay> typedStarOverlay_;
     // 装饰图与卡片同列：列宽即卡片宽，装饰图在列内按 align 对齐。
     std::shared_ptr<msimeui::StackPanel> cardColumn_;
     std::shared_ptr<msimeui::Container> frame_;

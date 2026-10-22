@@ -4,6 +4,7 @@
 #include "window/candidate_item_separators.h"
 #include "window/candidate_skin_layers.h"
 #include "window/candidate_skin_overlay.h"
+#include "window/candidate_typed_star_overlay.h"
 
 #include "msimeui/Window.h"
 
@@ -620,6 +621,10 @@ void CandidateSkinScene::Build(bool horizontal, bool pageArrows, bool expandPane
     overlayGrid_->AddChild(skinOverlayBack_, 0, 0);
     overlayGrid_->AddChild(card_, 0, 0);
     overlayGrid_->AddChild(skinOverlayFront_, 0, 0);
+    typedStarOverlay_ = std::make_shared<CandidateTypedStarOverlay>();
+    typedStarOverlay_->SetHorizontalAlignment(msimeui::HorizontalAlignment::Stretch);
+    typedStarOverlay_->SetVerticalAlignment(msimeui::VerticalAlignment::Stretch);
+    overlayGrid_->AddChild(typedStarOverlay_, 0, 0);
     cardColumn_ = std::make_shared<msimeui::StackPanel>(0.0f);
     cardColumn_->SetHorizontalAlignment(msimeui::HorizontalAlignment::Leading);
     cardColumn_->SetHorizontalContentAlignment(msimeui::HorizontalAlignment::Stretch);
@@ -976,6 +981,8 @@ CandidateSkinScene::Result CandidateSkinScene::Apply(const Settings &settings)
             layers = CandidateSkinLayers::SplitDecorations(package->freeDecorations);
         skinOverlayBack_->SetItems(OverlayItems(layers.below, packageRoot));
         skinOverlayFront_->SetItems(OverlayItems(layers.above, packageRoot));
+        typedStarOverlay_->Configure(package && package->schemaVersion >= 2 ? package->typedStars : std::nullopt,
+                                     packageRoot);
     }
 
     msimeui::Brush brush;
@@ -1045,4 +1052,27 @@ CandidateMainRowGeometry CandidateSkinScene::MainRowGeometry() const
     }
     const msimeui::RectF card = card_->GetBounds();
     return CandidateMainRowGeometryFromBounds({card.x, card.y, card.width, card.height}, items);
+}
+
+void CandidateSkinScene::SetTypedStarTime(EffectClock::time_point time)
+{
+    if (typedStarOverlay_)
+        typedStarOverlay_->SetTime(time);
+}
+
+void CandidateSkinScene::EmitTypedStarPairs(std::uint64_t count, EffectClock::time_point time)
+{
+    if (typedStarOverlay_)
+        typedStarOverlay_->SpawnPairs(count, time);
+}
+
+void CandidateSkinScene::ResetTypedStars()
+{
+    if (typedStarOverlay_)
+        typedStarOverlay_->Reset();
+}
+
+std::optional<CandidateSkinScene::EffectClock::time_point> CandidateSkinScene::NextTypedStarFrameDeadline() const
+{
+    return typedStarOverlay_ ? typedStarOverlay_->NextFrameDeadline() : std::nullopt;
 }

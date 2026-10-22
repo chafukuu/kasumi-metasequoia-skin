@@ -9,8 +9,10 @@
 #include "ipc/ipc.h"
 #include "log/candidate_diag_log.h"
 #include "skin/candidate_skin_catalog.h"
+#include "window/candidate_animation_scheduler.h"
 #include "window/candidate_skin_layers.h"
 #include "window/candidate_skin_overlay.h"
+#include "window/candidate_typing_star_events.h"
 #include "utils/common_utils.h"
 #include "utils/ime_utils.h"
 #include "utils/window_utils.h"
@@ -112,6 +114,7 @@ float StickyCardExtent(float kept, float natural)
 
 // 候选窗 HWND 上的动图帧定时器。宿主自己的定时器编号见 ime_windows_internal.h（2–14），这里避开它们。
 constexpr UINT_PTR kCandidateAnimationTimerId = 0x0A11;
+constexpr UINT kCandidateAnimationFrameMessage = WM_APP + 0x3A1;
 
 // 系统「显示动画」关闭（设置 → 辅助功能 → 视觉效果 → 动画效果）时只显示动图首帧，与浏览器的
 // prefers-reduced-motion 同一个开关。读不到时按开启处理。
@@ -172,6 +175,8 @@ struct CandidatePresenter::Impl
     bool contextSubmenuOpen = false;
     bool hostExpandedForMenu = false;
     size_t contextMenuPageIndex = 0;
+    std::optional<std::uint64_t> typingStarEpoch;
+    CandidateAnimationScheduler animationScheduler;
 };
 
 CandidatePresenter::CandidatePresenter() = default;
@@ -189,6 +194,9 @@ bool CandidatePresenter::IsBound() const
 
 bool CandidatePresenter::Bind(HWND hwnd)
 {
+    StopAnimationFrames();
+    bound_ = false;
+    animationClockRunning_ = false;
     hwnd_ = hwnd;
     if (!hwnd)
     {
@@ -221,6 +229,7 @@ bool CandidatePresenter::Bind(HWND hwnd)
     impl_->window->AdoptExistingHwnd(hwnd);
     impl_->window->SetStealFocusOnClick(false);
     bound_ = impl_->resources.EnsureForComposition(hwnd);
+    impl_->animationScheduler.Bind(hwnd, kCandidateAnimationFrameMessage);
     // 先按当前皮肤搭好场景，第一次显示之前窗口就有内容可画。
     ApplySkin();
     CAND_DIAG_LOGF(L"candidate-d2d bind hwnd={:#x} composition={}", reinterpret_cast<uintptr_t>(hwnd), bound_ ? 1 : 0);
@@ -285,6 +294,7 @@ void CandidatePresenter::ApplySkin()
     // 也走到这里，丢掉已解码的图片，皮肤目录里换过的图才会重新读取。
     StopAnimationFrames();
     animationClockRunning_ = false;
+    impl_->scene.ResetTypedStars();
     impl_->resources.ClearImageCaches();
 
     CandidateSkinScene::Settings settings;
@@ -519,8 +529,8 @@ void CandidatePresenter::ScrollExpanded(short delta)
     impl_->expandScroller->SetScrollOffset(offset - static_cast<float>(delta) / static_cast<float>(WHEEL_DELTA) *
                                                         expandRowStepDip_);
     RequestMoreExpandedIfNearEnd();
-    Present();
-    ValidateRect(hwnd_, nullptr);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+    UpdateWindow(hwnd_);
 }
 
 namespace
@@ -909,16 +919,15 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
     const int firstX = onScreen && x > current.left ? current.left : x;
     const int firstY = onScreen && y > current.top ? current.top : y;
     // WM_SIZE from this resize would present the frame once more right before
-    // the explicit Present below; let it only resize the swap chain.
+    // the synchronous paint below; let it only resize the swap chain.
     placingHost_ = true;
     SetWindowPos(hwnd_, HWND_TOPMOST, firstX, firstY, hostWidthPx, hostHeightPx, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     placingHost_ = false;
     impl_->resources.EnsureForComposition(hwnd_);
-    Present();
-    // Every setter above invalidated the window, which queued a WM_PAINT that
-    // would render the whole card (shadow blur included) a second time. The
-    // frame just presented is already current.
-    ValidateRect(hwnd_, nullptr);
+    // Consume the setters' dirty region through BeginPaint once. A failed
+    // frame or an invalidation raised while rendering must remain pending.
+    InvalidateRect(hwnd_, nullptr, FALSE);
+    UpdateWindow(hwnd_);
     if (firstX != x || firstY != y)
     {
         SetWindowPos(hwnd_, nullptr, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
@@ -982,6 +991,7 @@ void CandidatePresenter::ShowFromGlobalState(POINT caret)
     // the show request so MoveCandidate / the settle timer can place it later.
     if (caret.y == Global::INVALID_Y)
     {
+        impl_->scene.ResetTypedStars();
         CloseContextMenu(false);
         StopAnimationFrames();
         SetCandidateHostCloaked(true);
@@ -1000,6 +1010,7 @@ void CandidatePresenter::ShowFromGlobalState(POINT caret)
         impl_->resources.SetAnimationEpoch(msimeui::DeviceResources::AnimationClock::now());
         animationClockRunning_ = true;
     }
+    ConsumeTypedStarInput();
     std::wstring preedit;
     size_t caretIndex = 0;
     if (GetConfiguredCandidateWindowPreeditStyle() != "empty")
@@ -1125,11 +1136,49 @@ void CandidatePresenter::ShowFromGlobalState(POINT caret)
     Global::PublishRenderedCandidatePageGeneration(renderedGeneration);
 }
 
+bool CandidatePresenter::ConsumeTypedStarInput()
+{
+    // Worker resets own input continuity. Delayed UI hides and shows only
+    // consume finished pairs, so they cannot erase a new pending character.
+    const auto typingEvents = CandidateTypingStars::ConsumeSnapshot();
+    const bool epochChanged = impl_->typingStarEpoch && *impl_->typingStarEpoch != typingEvents.epoch;
+    if (epochChanged)
+        impl_->scene.ResetTypedStars();
+    impl_->typingStarEpoch = typingEvents.epoch;
+    if (impl_->resources.AreAnimationsEnabled())
+    {
+        impl_->scene.EmitTypedStarPairs(typingEvents.bursts, msimeui::DeviceResources::AnimationClock::now());
+        return typingEvents.bursts != 0 || epochChanged;
+    }
+    impl_->scene.ResetTypedStars();
+    return epochChanged;
+}
+
+void CandidatePresenter::PresentTypedStarsFromInput()
+{
+    if (!bound_ || !hwnd_ || !impl_ || !impl_->window || !::is_global_wnd_cand_shown || !IsWindowVisible(hwnd_))
+        return;
+    const bool previouslyAnimated = impl_->resources.AreAnimationsEnabled();
+    impl_->resources.SetAnimationsEnabled(skinAnimates_ && SystemAnimationsEnabled());
+    const bool decorationChanged = ConsumeTypedStarInput();
+    if (decorationChanged || (previouslyAnimated && !impl_->resources.AreAnimationsEnabled()))
+    {
+        // Paint through BeginPaint so SpawnPairs' dirty region is consumed once.
+        // Render may invalidate again (e.g. smooth scrolling); preserve that work.
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        UpdateWindow(hwnd_);
+    }
+}
+
 void CandidatePresenter::Hide()
 {
     if (!hwnd_)
     {
         return;
+    }
+    if (impl_)
+    {
+        impl_->scene.ResetTypedStars();
     }
     hasPlacementTrace_ = false;
     reservedLeft_.Reset();
@@ -1171,21 +1220,22 @@ void CandidatePresenter::Hide()
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
-void CandidatePresenter::Present()
+bool CandidatePresenter::Present()
 {
     if (!bound_ || !hwnd_ || !impl_ || !impl_->window)
     {
-        return;
+        return false;
     }
     RECT rc{};
-    GetClientRect(hwnd_, &rc);
+    if (!GetClientRect(hwnd_, &rc))
+        return false;
     const UINT width = static_cast<UINT>((std::max)(1L, rc.right));
     const UINT height = static_cast<UINT>((std::max)(1L, rc.bottom));
     if (!impl_->resources.EnsureForComposition(hwnd_))
     {
         if (!impl_->resources.UsesBackdropComposition())
         {
-            return;
+            return false;
         }
         // 建不起 Windows.UI.Composition：本次运行退回交换链，并让下一次 ApplySkin 换回不透明底色。
         CAND_DIAG_LOGF(L"candidate-d2d backdrop composition unavailable, falling back to swap chain");
@@ -1195,15 +1245,18 @@ void CandidatePresenter::Present()
         impl_->resources.SetBackdropComposition(false);
         if (!impl_->resources.EnsureForComposition(hwnd_))
         {
-            return;
+            return false;
         }
     }
     impl_->resources.Resize(width, height);
     // Samples the animation clock for this frame and starts the next-frame deadline over.
+    const auto effectTime = msimeui::DeviceResources::AnimationClock::now();
     impl_->resources.BeginFrame();
+    impl_->resources.SetFrameTime(effectTime);
+    impl_->scene.SetTypedStarTime(effectTime);
     if (!impl_->resources.BeginDraw())
     {
-        return;
+        return false;
     }
     ID2D1RenderTarget *target = impl_->resources.GetRenderTarget();
     target->Clear(D2D1::ColorF(0, 0.0f));
@@ -1232,10 +1285,17 @@ void CandidatePresenter::Present()
     if (hr == D2DERR_RECREATE_TARGET)
     {
         impl_->resources.DiscardTarget();
-        return;
+        return false;
     }
-    impl_->resources.Present();
+    if (FAILED(hr))
+        return false;
+    if (FAILED(impl_->resources.Present()))
+    {
+        impl_->resources.DiscardTarget();
+        return false;
+    }
     ScheduleAnimationFrame();
+    return true;
 }
 
 void CandidatePresenter::ScheduleAnimationFrame()
@@ -1245,7 +1305,10 @@ void CandidatePresenter::ScheduleAnimationFrame()
         return;
     }
     const msimeui::Scene *scene = impl_->window->GetScene();
-    const auto deadline = scene ? scene->GetNextFrameDeadline() : std::nullopt;
+    auto deadline = scene ? scene->GetNextFrameDeadline() : std::nullopt;
+    const auto starDeadline = impl_->scene.NextTypedStarFrameDeadline();
+    if (starDeadline && (!deadline || *starDeadline < *deadline))
+        deadline = starDeadline;
     // While placing, PlaceAndShow presents and schedules once the host is visible; a hidden or
     // parked host has nothing on screen to animate.
     if (!deadline || placingHost_ || !::is_global_wnd_cand_shown || !IsWindowVisible(hwnd_))
@@ -1253,6 +1316,15 @@ void CandidatePresenter::ScheduleAnimationFrame()
         StopAnimationFrames();
         return;
     }
+    *deadline = CandidateAnimationScheduler::YieldIfOverdue(*deadline, CandidateAnimationScheduler::Clock::now());
+    // Keep a pending earlier frame when input/paint presents in between. The
+    // worker only posts a notification; all scene sampling and drawing stay here.
+    if (impl_->animationScheduler.Schedule(*deadline))
+    {
+        KillTimer(hwnd_, kCandidateAnimationTimerId);
+        return;
+    }
+    // Resource creation/arming failure retains the original HWND timer fallback.
     const auto wait =
         std::chrono::ceil<std::chrono::milliseconds>(*deadline - msimeui::DeviceResources::AnimationClock::now());
     const UINT delay = static_cast<UINT>((std::clamp)(wait.count(), static_cast<long long>(USER_TIMER_MINIMUM),
@@ -1264,6 +1336,8 @@ void CandidatePresenter::ScheduleAnimationFrame()
 
 void CandidatePresenter::StopAnimationFrames()
 {
+    if (impl_)
+        impl_->animationScheduler.Cancel();
     if (hwnd_)
     {
         KillTimer(hwnd_, kCandidateAnimationTimerId);
@@ -1343,12 +1417,41 @@ void CandidatePresenter::NoteHoverOverItem(POINT clientPoint)
 
 bool CandidatePresenter::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
+    if (message == WM_DESTROY || message == WM_NCDESTROY)
+    {
+        // Invalidate queued generations and join the worker before this HWND
+        // can be destroyed or reused, including after a partially failed Bind.
+        StopAnimationFrames();
+        if (impl_)
+        {
+            impl_->animationScheduler.Bind(nullptr, 0);
+            if (impl_->window)
+                impl_->window->AdoptExistingHwnd(nullptr);
+        }
+        bound_ = false;
+        animationClockRunning_ = false;
+        hasPlacementTrace_ = false;
+        hwnd_ = nullptr;
+        ::is_global_wnd_cand_shown = false;
+        Global::SetCandidateWindowRenderedVisible(false);
+        // The host still owns destruction (including WM_DESTROY's PostQuitMessage).
+        return false;
+    }
     if (!bound_ || !impl_ || !impl_->window)
     {
         return false;
     }
     switch (message)
     {
+    case kCandidateAnimationFrameMessage:
+        if (impl_->animationScheduler.ConsumeMessage(wParam, lParam))
+        {
+            if (::is_global_wnd_cand_shown && !placingHost_ && IsWindowVisible(hwnd_))
+                Present();
+            else
+                StopAnimationFrames();
+        }
+        return true;
     case WM_ERASEBKGND:
         return true;
     case WM_TIMER:
@@ -1366,8 +1469,12 @@ bool CandidatePresenter::HandleMessage(UINT message, WPARAM wParam, LPARAM lPara
     case WM_PAINT: {
         PAINTSTRUCT ps{};
         BeginPaint(hwnd_, &ps);
-        Present();
+        const bool presented = Present();
         EndPaint(hwnd_, &ps);
+        // BeginPaint consumed the old dirty region. Retain a retry on render
+        // failure, and leave any invalidation raised during rendering intact.
+        if (!presented)
+            InvalidateRect(hwnd_, nullptr, FALSE);
         return true;
     }
     case WM_SIZE:

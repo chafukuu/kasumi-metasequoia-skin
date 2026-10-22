@@ -182,6 +182,39 @@ struct BandArtwork
     double foregroundRightClipDip = 0.0;
 };
 
+// Optional, zero-measure foreground particles. All coordinates are relative to the candidate card in DIPs.
+struct TypedStars
+{
+    std::string yellowImage;
+    std::string pinkImage;
+    std::string blueImage;
+    double originXDip = 66.52;
+    double originYDip = 22.57;
+    double minXDip = 8.0;
+    double maxXDip = 107.0;
+    double minYDip = -100.0;
+    double maxYDip = 132.0;
+    double widthMinDip = 19.0;
+    double widthMaxDip = 23.0;
+    double riseMinDip = 24.0;
+    double riseMaxDip = 38.0;
+    double endXMinDip = 18.0;
+    double endXMaxDip = 94.0;
+    double endYMinDip = 96.0;
+    double endYMaxDip = 108.0;
+    double durationMinMs = 1200.0;
+    double durationMaxMs = 1450.0;
+    double fadeInMinMs = 90.0;
+    double fadeInMaxMs = 130.0;
+    double fadeOutMinMs = 260.0;
+    double fadeOutMaxMs = 360.0;
+    double rotationMinDeg = -24.0;
+    double rotationMaxDeg = 24.0;
+    double spinMinDeg = -70.0;
+    double spinMaxDeg = 70.0;
+    double pairSeparationDip = 22.0;
+};
+
 struct Package
 {
     // 皮肤规范版本：1 为通用现代卡片皮肤，2 为支持九宫格与自由挂件的高级皮肤。v2 必须以 canvas 为 base，
@@ -261,6 +294,8 @@ struct Package
     std::optional<InsetsDip> outerInsetsDip;
     // v2 专有特性：多层自由锚定挂件（支持动图）
     std::vector<FreeDecoration> freeDecorations;
+    // Absent by default, and ignored by v1 skins. Does not alter candidate geometry.
+    std::optional<TypedStars> typedStars;
 };
 
 struct Issue
