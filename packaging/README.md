@@ -1,98 +1,58 @@
-# 下载与使用
+# 香澄 · 水杉输入法皮肤
 
-## 下载哪个文件
+适配水杉输入法 Windows v0.11.1 的自定义原生皮肤。当前皮肤版本为 **v0.5.7**，加入实时 LiveSD 小人与候选框定位、舞台跟随修正，仍作为早期预览发布。
 
-打开 [v0.5.6 发布页](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/tag/v0.5.6)，下载：
+**[下载 Windows x64 安装包](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/tag/v0.5.7)** · **[下载与使用说明](docs/下载与使用.md)** · **[星星参数与图片接口](docs/星星参数与图片接口.md)** · **[开发与构建](docs/开发与构建.md)**
 
-`kasumi-metasequoia-skin-v0.5.6-windows-x64.zip`
+## 当前效果
 
-同时提供 `SHA256SUMS.txt`。在 PowerShell 中可用以下命令核对下载文件：
+- 原图保持固定比例，左侧吉他和飘带尽量固定；长度由右侧人物移动和遮挡控制。
+- 整体采用较紧凑的尺寸，右侧人物独立缩小并上移。
+- 双品丝精确跟随真实候选边界，与文字在同一帧绘制。
+- 背景、人物、文字和品丝全部由同一个原生窗口绘制，一起出现和消失；无需驻留伴随程序。
+- 七个候选保持单行。超长候选显示省略号，选中时仍提交完整内容。
+- 吉他沿用 v0.5.4 的 ±8°、1.5 秒周期摆动，人物、飘带及候选排版保持不变。
+- 每连续新增两个被接受字符，从琴身发出两颗随机抛物星星；宽 19–23 DIP，平滑淡入淡出。
+- 蓝色 : 品红 : 黄色 = **2 : 1 : 1**，每组四颗打乱顺序，包含两蓝、一品红、一黄。蓝图与原品红图同为 114×136 像素，轮廓、尺寸、alpha 与白色细节一致，只有 RGB 颜色变化。
+- 删除或其他编辑操作只清除未完成的两字符计数，已发出的星星继续飞行至正常淡出；真正结束会话时仍正常清理。
+- 动画继续使用原生 Direct2D 绘制，改进续帧调度、过载让步、失败重绘和图片缓存，减少不必要的停顿。
+- 候选框可见时小人左侧活动边界额外开放 8 DIP；候选变长时固定本轮舞台水平锚点，避免左边界向右漂移。
+- 候选框连续变化时保留舞台跟随速度并平滑追踪，避免每次布局更新重启动画造成卡顿。
+- LiveSD 小人跟随中英文键入，支持待机、演奏与转身动作、拖动、点击反应和透明区域穿透；候选框伸缩不带动小人右移。不同键入速度下移动速度均提高约 35–38%。
+- 前景五人挂件置于候选文字下方，不参与候选布局。
 
-```powershell
-Get-FileHash .\kasumi-metasequoia-skin-v0.5.6-windows-x64.zip -Algorithm SHA256
-```
+LiveSD 使用可选的 x86/x64 TSF 更新；安装器会把已加载 DLL 的替换安排在下一次 Windows 重启。重启后才启用 LiveSD 输入事件。星星的大小、轨迹、时间和 PNG 路径可通过[皮肤参数](docs/星星参数与图片接口.md)调整。
 
-结果应与校验文件相同。GitHub 自动提供的 Source code (zip/tar.gz) 是源码包，不包含安装用的 Server 二进制。
+## 快速安装
 
-## 安装条件
+1. 安装并确认可以使用 [官方水杉输入法 v0.11.1](https://github.com/metasequoiaime/msime-windows/releases/tag/v0.11.1)。
+2. 从本项目 Releases 下载 `kasumi-metasequoia-skin-v0.5.7-windows-x64.zip`，完整解压。
+3. 双击 `Install.cmd`，按 Windows 提示授予管理员权限。
+4. 等待 Server 运行检查完成；若报告 TSF 已排队更新，请重启 Windows 后再到记事本测试 LiveSD。
 
-- Windows x64；本机验证环境为 Windows 11。
-- 已安装并能正常输入的 [水杉输入法 v0.11.1](https://github.com/metasequoiaime/msime-windows/releases/tag/v0.11.1)。本包不是完整输入法安装器，不包含词库和 TSF 注册组件。
-- Microsoft Visual C++ v14 x64 运行库至少达到构建工具对应版本。当前构建使用 MSVC 14.51；可从[微软官方页面](https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist)获取更新。
-- 可以通过正常 Windows 管理员确认。
+本包包含匹配的自定义 Server 和皮肤。**仅复制皮肤目录不足以获得本版效果。** GitHub 的 “Source code” 压缩包用于开发；普通使用请下载上面的 Windows 安装包。
 
-本体哈希不在发布清单的兼容列表时，安装器会停止。请保留报错和版本信息，不要跳过检查强行替换。
+安装前会备份 Server、两种架构的 TSF、皮肤和配置；只合并本皮肤需要的设置，不替换词库或用户输入历史。安装失败会尝试自动恢复，手动回退见[使用说明](docs/下载与使用.md#回退)。
 
-## 安装
+## 适用范围与验证
 
-1. 完整解压 Windows 安装包，不要在压缩软件内部运行。
-2. 双击 `Install.cmd`，完成正常的 UAC 确认。
-3. 等待安装器完成备份、替换和持续运行检查。安装期间输入法会正常重启。
-4. 出现成功提示后，在记事本切换到水杉输入法。
-5. 输入 `xiangcheng`，再连续输入、删除较长内容，检查候选都处于白色飘带内。
-6. 按 Esc 或完成选词，检查文字、飘带和人物一起消失。
+适配 Windows x64 与水杉输入法 0.11.1/0.11.2；安装器只接受清单明确列出的 Server 哈希，未知本体会拒绝覆盖。
 
-默认安装皮肤 `kasumi-adaptive`、字号 15、每页 7 项、横排单行并隐藏预编辑行。超长候选只在显示时省略，实际提交内容保持完整。
+v0.5.7 的 LiveSD 动作检查 21 组、13,846 个样本，原生窗口与 Direct2D 检查 89 项；候选增长锚点、左侧边界及不同键入速度移动覆盖在自动检查中。前一版 Server 的 30 秒运行健康记录仍保留。新发布二进制与 TSF 的便携安装、Windows 重启后实机显示、物理拖动和跨 DPI 显示器尚未完整验收；[v0.5.7 验证记录](docs/验证记录_v0.5.7.md)不宣称稳定 60 FPS。
 
-本版已由输入法本体绘制全部图形，无需另外启动 `KasumiBandOverlay`、裁切器或 LiveSD。旧伴随程序存在时，安装器会在验证其身份后请求正常退出。
+便携安装器没有在另一台全新电脑进行完整安装、回退演练。已安装版本的健康记录和便携安装器测试分别记录，详见[验证记录](docs/验证记录.md)。
 
-v0.5.6 保留原生吉他摆动，并将打字弹出的星星设为蓝色 : 品红 : 黄色 = 2 : 1 : 1。蓝色星星只替换颜色，轮廓、尺寸与透明边缘不变。每两个接受字符弹出两颗星；删除或编辑会清除未满两个字符的计数，已经弹出的星星继续自然消失。本版还修复动画调度和图片缓存反复解码引起的卡顿。
+Server 与 TSF 二进制使用本机测试证书签名；该证书不保证其他电脑信任，需在目标电脑确认 Windows 的签名与 UIAccess 行为。管理员程序中的输入界面尚未验收。若提示缺少 VC++ 运行库，请使用[微软官方 v14 x64 可再发行组件](https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist)。
 
-本机已安装并验证对应的 v0.5.6 产品。本便携包的 15 项静态及隔离目录验证通过，覆盖 Windows PowerShell 5.1 / PowerShell 7 的语法、升级与重复安装计划、恢复计划，以及清单和篡改拒绝检查；所有计划均未改变模拟目录。尚未实际执行本便携包的安装与恢复，也未在全新电脑完成完整演练。
+## 目录
 
-详细验证范围见 `docs/验证记录.md`，星星参数和图片替换约束见 `docs/星星参数与图片接口.md`。
-
-## 只查看安装计划
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -WhatIf
-```
-
-`-WhatIf` 不修改输入法，不需要管理员权限。目录与默认位置不同时，可以显式指定：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -WhatIf -ServerDirectory 'D:\MetasequoiaIME\server' -DataDirectory 'D:\MetasequoiaData'
-```
-
-真实安装时在管理员 PowerShell 中执行相同命令并去掉 `-WhatIf`。默认先读取原安装的注册表路径，缺失时使用 Program Files 与当前用户 LocalAppData 的常规位置。
-
-## 更新
-
-保留旧下载包与备份，解压新版本后运行新的 `Install.cmd`。每次真实修改前会生成独立备份。完全相同的版本和设置会直接报告无需修改。
-
-## 回退
-
-备份通常位于：
-
-`%LOCALAPPDATA%\metasequoiaime\kasumi-backups\<时间戳>`
-
-自定义数据目录则位于该目录下的 `kasumi-backups`。备份内的 `rollback.json` 记录原本体、皮肤和配置的校验值。
-
-先列出备份：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Restore.ps1 -List
-```
-
-在管理员 PowerShell 中预览并恢复最近一次备份：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Restore.ps1 -Latest -WhatIf
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Restore.ps1 -Latest
-```
-
-也可以用 `-BackupPath '完整备份目录'` 选择明确的一份备份。恢复会重启输入法；当前文件会另存，词库和用户输入历史不参与替换。未知自编本体会拒绝覆盖。
-
-## 常见问题
-
-| 现象 | 处理 |
+| 路径 | 内容 |
 |---|---|
-| 下载后找不到 Install.cmd | 下载 Windows x64 安装包，而非 Source code；完整解压 |
-| 提示本体哈希不受支持 | 确认安装的是水杉 v0.11.1，保留报错，不强行覆盖 |
-| 提示缺少 VCRUNTIME/MSVCP 或无法找到入口点 | 从微软官方页面更新 v14 x64 运行库，再重试 |
-| 看到两套人物或装饰 | 退出旧伴随程序，重新运行安装器；本版仅需水杉本体 |
-| 长候选显示省略号 | 这是单行显示方式；选中后提交完整内容 |
-| 管理员应用里皮肤不显示 | 当前本体未签名且未启用 UIAccess，该使用范围尚未验收 |
-| 安装或重启失败 | 查看安装输出与备份；必要时按上文回退 |
+| `skin/kasumi-adaptive` | 最终皮肤、原图、分层素材与遮罩 |
+| `packaging` | 可移植安装、回退脚本与发布清单 |
+| `native-source` | 修改后的完整水杉源码，包含固定版本的 vendor 源码 |
+| `patches` | 相对上游 v0.11.1 的完整修改补丁 |
+| `native`、`tools` | 素材导出工具及其源码；日常输入不需要运行 |
+| `docs` | 下载、构建、验证与来源说明 |
 
-提交问题时可附系统缩放、应用名、水杉版本和截图；请先删去截图中的私人输入内容。
+水杉源码基于 `metasequoiaime/msime-windows` 的 `v0.11.1` / `dd018f79858314ed542a47c528608752b13bd261`，保留上游 GPL-3.0 及第三方许可。人物、美术素材与代码许可分开说明，见 [素材说明](docs/素材说明.md)。

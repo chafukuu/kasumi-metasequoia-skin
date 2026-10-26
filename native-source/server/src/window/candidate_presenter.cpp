@@ -12,6 +12,7 @@
 #include "window/candidate_animation_scheduler.h"
 #include "window/candidate_skin_layers.h"
 #include "window/candidate_skin_overlay.h"
+#include "window/livesd_host.h"
 #include "window/candidate_typing_star_events.h"
 #include "utils/common_utils.h"
 #include "utils/ime_utils.h"
@@ -845,7 +846,7 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
     lastHostHeightPx_ = heightPx;
     const int cardLeftPx = static_cast<int>(std::lround(cardLeftDip * scale));
     const int cardTopPx = static_cast<int>(std::lround(cardTopDip * scale));
-    const int cardHeightPx = static_cast<int>(std::lround(cardHeightDip * scale));
+    const int cardHeightPx = (std::max)(1, static_cast<int>(std::ceil(cardHeightDip * scale)));
     int x = properPos->first - cardLeftPx;
     int y = properPos->second - cardTopPx;
     const MonitorCoordinates monitor = GetMonitorCoordinatesFromPoint(caret);
@@ -875,21 +876,17 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
     }
     else
     {
-        if (x + cardLeftPx + cardWidthPx > monitor.right)
-            x = monitor.right - cardLeftPx - cardWidthPx - 2;
-        if (x + cardLeftPx < monitor.left)
-            x = monitor.left + 2 - cardLeftPx;
+        const int edgePadPx = static_cast<int>(std::lround(2.0f * scale));
+        const int cardX = std::clamp(x + cardLeftPx, monitor.left + edgePadPx,
+                                     (std::max)(monitor.left + edgePadPx, monitor.right - edgePadPx - cardWidthPx));
+        x = cardX - cardLeftPx;
     }
-    const int cardBottom = y + cardTopPx + cardHeightPx;
-    if (cardBottom > monitor.bottom)
-    {
-        y = monitor.bottom - cardTopPx - cardHeightPx - 2;
-    }
-    // Allow the mascot to clip above the work area so the card stays on the caret.
-    if (y + cardTopPx < monitor.top)
-    {
-        y = monitor.top + 2 - cardTopPx;
-    }
+    // Use the same DPI-scaled pad and upward rounding as the placement policy.
+    // A fractional card height must not lose its last physical pixel at a seam.
+    const int edgePadPx = static_cast<int>(std::lround(2.0f * scale));
+    const int cardY = std::clamp(y + cardTopPx, monitor.top + edgePadPx,
+                                 (std::max)(monitor.top + edgePadPx, monitor.bottom - edgePadPx - cardHeightPx));
+    y = cardY - cardTopPx;
     // Rendering must use the same scale the window is sized with: the ui
     // override replaces GetDpiForWindow (144 inside RDP) so DIPs map exactly
     // onto the pixels computed above. Must land before EnsureForComposition —
@@ -933,6 +930,8 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
         SetWindowPos(hwnd_, nullptr, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
     }
     SetCandidateHostCloaked(false);
+    LiveSDHost::SetCandidateAnchor(
+        {x + cardLeftPx, y + cardTopPx, x + cardLeftPx + cardWidthPx, y + cardTopPx + cardHeightPx}, scale);
     hasPlacementTrace_ = true;
     lastPlacementCaret_ = caret;
     lastPlacementFirst_ = {firstX, firstY};
@@ -1172,6 +1171,7 @@ void CandidatePresenter::PresentTypedStarsFromInput()
 
 void CandidatePresenter::Hide()
 {
+    LiveSDHost::ClearCandidateAnchor();
     if (!hwnd_)
     {
         return;

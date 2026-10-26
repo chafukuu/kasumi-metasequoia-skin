@@ -215,6 +215,22 @@ struct TypedStars
     double pairSeparationDip = 22.0;
 };
 
+// Optional v2 realtime companion. Stage and sprite dimensions use DIPs; the anchor is the sprite foot center.
+struct LiveSD
+{
+    std::string clickImage;
+    double clickDurationMs = 1600.0;
+    std::string idleImage;
+    std::string idle2Image;
+    std::string happyImage;
+    std::string missImage;
+    double stageWidthDip = 520.0;
+    double stageHeightDip = 246.0;
+    double widthDip = 161.28;
+    double heightDip = 185.472;
+    double footYDip = 233.0;
+};
+
 struct Package
 {
     // 皮肤规范版本：1 为通用现代卡片皮肤，2 为支持九宫格与自由挂件的高级皮肤。v2 必须以 canvas 为 base，
@@ -296,6 +312,8 @@ struct Package
     std::vector<FreeDecoration> freeDecorations;
     // Absent by default, and ignored by v1 skins. Does not alter candidate geometry.
     std::optional<TypedStars> typedStars;
+    // Absent or disabled by default, and ignored by v1 skins. Does not alter candidate geometry.
+    std::optional<LiveSD> liveSD;
 };
 
 struct Issue

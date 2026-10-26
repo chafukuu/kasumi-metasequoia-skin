@@ -6,6 +6,7 @@
 #include "ipc/ipc.h"
 #include "ime_windows.h"
 #include "window/candidate_presenter.h"
+#include "window/livesd_host.h"
 #include "window/floating_toolbar_presenter.h"
 #include "defines/defines.h"
 #include "defines/globals.h"
@@ -113,6 +114,11 @@ int FineTuneWindow(HWND /*hwnd*/)
 
 LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    if (message == LiveSDHost::kActivityMessage)
+    {
+        LiveSDHost::HandleActivityMessage(lParam);
+        return 0;
+    }
     if (message == WM_POWERBROADCAST || message == WM_DISPLAYCHANGE || message == WM_DWMCOMPOSITIONCHANGED ||
         message == WM_SETTINGCHANGE)
     {
@@ -818,6 +824,7 @@ LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARA
     }
 
     case WM_DESTROY: {
+        LiveSDHost::Shutdown();
         PostQuitMessage(0);
         break;
     }

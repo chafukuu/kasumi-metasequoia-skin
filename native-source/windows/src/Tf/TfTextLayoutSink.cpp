@@ -30,8 +30,11 @@ POINT GetPhysicalTextAnchor(_In_ ITfContextView *pContextView, _In_ const RECT &
     return anchor;
 }
 
-bool ResolveCollapsedSelectionAnchor(_In_ ITfContext *context, TfEditCookie editCookie, _Out_ POINT *anchor)
+bool ResolveCollapsedSelectionAnchor(_In_ ITfContext *context, TfEditCookie editCookie, _Out_ POINT *anchor,
+                                     _Out_opt_ HWND *contextRootWindow)
 {
+    if (contextRootWindow)
+        *contextRootWindow = nullptr;
     if (!context || !anchor)
         return false;
 
@@ -53,12 +56,20 @@ bool ResolveCollapsedSelectionAnchor(_In_ ITfContext *context, TfEditCookie edit
         RECT rect{};
         BOOL clipped = TRUE;
         const HRESULT viewResult = context->GetActiveView(&view);
-        if (SUCCEEDED(viewResult) && view &&
-            SUCCEEDED(view->GetTextExt(editCookie, selection.range, &rect, &clipped)) &&
-            IsUsableCaretExtent(rect.left, rect.top, rect.right, rect.bottom))
+        if (SUCCEEDED(viewResult) && view)
         {
-            *anchor = GetPhysicalTextAnchor(view, rect);
-            resolved = true;
+            HWND contextWindow = nullptr;
+            if (SUCCEEDED(view->GetWnd(&contextWindow)) && contextWindow && contextRootWindow)
+            {
+                HWND root = GetAncestor(contextWindow, GA_ROOTOWNER);
+                *contextRootWindow = root ? root : contextWindow;
+            }
+            if (SUCCEEDED(view->GetTextExt(editCookie, selection.range, &rect, &clipped)) &&
+                IsUsableCaretExtent(rect.left, rect.top, rect.right, rect.bottom))
+            {
+                *anchor = GetPhysicalTextAnchor(view, rect);
+                resolved = true;
+            }
         }
         if (view)
             view->Release();

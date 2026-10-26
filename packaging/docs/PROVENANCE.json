@@ -1,0 +1,178 @@
+{
+  "version": "0.5.7",
+  "verifiedLocalDate": "2026-10-26",
+  "releaseTag": "v0.5.7",
+  "releaseAsset": "kasumi-metasequoia-skin-v0.5.7-windows-x64.zip",
+  "upstream": "https://github.com/metasequoiaime/msime-windows",
+  "baseTag": "v0.11.1",
+  "baseCommit": "dd018f79858314ed542a47c528608752b13bd261",
+  "vendor": {
+    "cpp-pinyin": "e4dd8310e3bb6b8ac8edc42f2cbd80be92586a8e",
+    "opencc": "8cf737a4e193db27d675b2ce9867d84aace33745"
+  },
+  "nativeSha256": "082A48E4A48A4FE7F723FDE8F62C97C4C5DC386EB8F38B6F38195336B397EA2F",
+  "nativePatch": {
+    "path": "patches/kasumi-native-v057.patch",
+    "sha256": "0FF6C6DF292513A8BF7A7D2A1BCBC1CACA42FA56870CC7189C2FEE0C55F2C625",
+    "base": "v0.11.1",
+    "baseCommit": "dd018f79858314ed542a47c528608752b13bd261"
+  },
+  "sourceImageSha256": "c2c798cc2896c3c23a09ed24db5c926280616cda380d6aba6098ec0a499b25c4",
+  "nativeUiAccess": true,
+  "runtimeHelperRequired": false,
+  "visualAcceptance": null,
+  "liveVisualVerified": false,
+  "liveVisualFrameRateMeasured": false,
+  "features": {
+    "guitarSwingDegrees": [
+      -8,
+      8
+    ],
+    "guitarSwingPeriodMs": 1500,
+    "acceptedCharactersPerBurst": 2,
+    "starsPerBurst": 2,
+    "editingPreservesLiveStars": true,
+    "editingClearsPendingPairOnly": true,
+    "trueCompositionEndResetsState": true,
+    "starColorOrder": [
+      "blue",
+      "magenta",
+      "yellow"
+    ],
+    "starColorRatio": [
+      2,
+      1,
+      1
+    ],
+    "starColorSelection": "shuffled bags of blue, blue, magenta, yellow",
+    "legacyTwoColorSkinSupported": true,
+    "motionParametersUnchangedFrom": "0.5.5",
+    "livesdTypingCadence": true,
+    "candidateGrowthAnchorFixed": true,
+    "candidateLeftMotionExpansionDip": 8,
+    "continuousFollowPreservesVelocity": true,
+    "typingSpeedIncreasePercent": [
+      35,
+      38
+    ],
+    "poppinpartyPendant": true
+  },
+  "blueAsset": {
+    "size": [
+      114,
+      136
+    ],
+    "recolor": "(R,G,B,A) -> (G,B,R,A)",
+    "alphaByteIdentical": true,
+    "sourceSha256": "6716AD2490DC58F9FCFBC585D71266C14AACC53755AAFCFB946ECA326BD8E247",
+    "blueSha256": "E176B9E3A1E34E64336AFFB271A7017C52B25DE50A935A55CD8335DB342E46AD"
+  },
+  "build": {
+    "finalServerSha256": "082A48E4A48A4FE7F723FDE8F62C97C4C5DC386EB8F38B6F38195336B397EA2F",
+    "serverAuthenticodeValidOnBuildHost": true,
+    "tsfX64Sha256": "D95EA046ECC903ADD6401FF12B39381CCCE6230D915DD5895306DFC96199D5C9",
+    "tsfX86Sha256": "66DA662603E35184F514C7E3865F5F73EC29C32E071C4DC24394E5C005AD5FE5",
+    "tsfAuthenticodeValidOnBuildHost": true,
+    "reproducibleRebuildPerformedInThisPackagingPass": false
+  },
+  "tests": {
+    "liveSDMotion": {
+      "passed": true,
+      "groups": 21,
+      "samples": 13846,
+      "headerSha256": "36B52C232A8EAD2A3FC9EB72FBFD00691AC8EF8C4E67524332DF729B133F9FBB",
+      "sourceSha256": "B1935E66B479CCDB8D7AA093CEBEB6705A1F654B69A9DBBF522F2EA5CB074735"
+    },
+    "nativeHost": {
+      "passed": true,
+      "checks": 89,
+      "failures": 0,
+      "controlledForeground": true
+    },
+    "portablePackage": {
+      "manifestFiles": 28,
+      "packageServerMatchesManifest": true,
+      "ps51InstallRestoreParse": true,
+      "currentPowerShellInstallRestoreParse": true,
+      "whatIfNoChanges": true,
+      "restoreList": true,
+      "restoreDryRun": false
+    }
+  },
+  "historicalV053Tests": {
+    "candidateLayout": "36/36",
+    "catalogAndGeometry": "13/13",
+    "crossTranslationUnitCycles": 1000,
+    "sourceSceneLayouts": 4,
+    "assetLayerChecks": "79/79"
+  },
+  "limits": [
+    "The v0.5.7 portable installer has not completed a fresh-machine install, rebooted TSF replacement, or rollback rehearsal.",
+    "Real TSF host, physical mouse, mixed-monitor DPI, and visual frame rate are not confirmed.",
+    "Authenticode was valid in the build host environment; external trust of the local test certificate and uiAccess behavior are not guaranteed.",
+    "The source-based native motion and Direct2D tests use controlled fixtures and do not substitute for interactive acceptance."
+  ],
+  "compatibleImeVersions": [
+    "0.11.1",
+    "0.11.2"
+  ],
+  "compatibleInstalledServerSha256": [
+    "448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3",
+    "C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA",
+    "F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C",
+    "8843586A53876C6F626995014D8045DCB800329CBEB1F23A5DDC3DE9FF3FF5DC",
+    "143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E",
+    "CCDC1552B1690CF56101F92D390C9E37D8DD3E6B261B286F31CB7B4222EA5133"
+  ],
+  "historicalV056": {
+    "serverHealthChecks": [
+      {
+        "phase": "deployment",
+        "observedSeconds": 30,
+        "endpointChecks": 14,
+        "crashEvents": 0,
+        "healthy": true
+      },
+      {
+        "phase": "installed-reverification",
+        "observedSeconds": 30,
+        "endpointChecks": 15,
+        "crashEvents": 0,
+        "healthy": true
+      }
+    ],
+    "portablePackageVerification": {
+      "passed": true,
+      "checks": 15,
+      "powerShellEngines": [
+        "Windows PowerShell 5.1",
+        "PowerShell 7"
+      ],
+      "payloadFiles": 20,
+      "payloadBytes": 18509863,
+      "manifestSha256": "B9E2C0112BF5C10E722A57ADBEC41A5C112DD61ADF0D0C5ABF4126E9FAC26A72",
+      "upgradeAndNoopWhatIfPassed": true,
+      "restoreListAndWhatIfPassed": true,
+      "tamperedBackupRejected": true,
+      "unknownServerRejected": true,
+      "sameSizeBlueStarTamperRejected": true,
+      "payloadSizeTamperRejected": true,
+      "whatIfMockTreesUnchanged": true,
+      "realInstallExecuted": false,
+      "realRestoreExecuted": false
+    },
+    "verificationDocument": "docs/验证记录.md"
+  },
+  "portablePackageVerification": {
+    "passed": true,
+    "payloadManifestFiles": 28,
+    "zipExtractedAndChecked": true,
+    "installWhatIfWindowsPowerShell51": true,
+    "installWhatIfPowerShell7": true,
+    "whatIfNoChanges": true,
+    "restoreList": true,
+    "restoreDryRun": false,
+    "realInstallExecuted": false,
+    "realRestoreExecuted": false
+  }
+}

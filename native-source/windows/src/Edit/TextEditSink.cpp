@@ -117,6 +117,7 @@ STDAPI CMetasequoiaIME::OnEndEdit(__RPC__in_opt ITfContext *pContext, TfEditCook
     {
         return E_INVALIDARG;
     }
+    _QueueLiveSDActivity();
     if (_IsComposing() && !_localSessionResetPending.load(std::memory_order_acquire))
     {
         HRESULT compositionStateHr = S_OK;

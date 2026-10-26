@@ -31,6 +31,23 @@ Existing DLLs with unversioned hello remain accepted by the new Server using the
 
 Append opcodes; never change released values or reuse them. An incompatible layout needs a new major protocol and an explicit migration, not another copy of a header. Minor additions must be optional capabilities.
 
+`LiveSDActivity` is optional (capability bit 9, Main event 18). Its `keycode` is a
+numeric kind: 0 focused caret update, 1 typing pulse, 2 blur. `point[]` carries a
+resolved physical caret anchor for kind 0. A kind-1 typing pulse may carry either
+that resolved anchor or `{0, -100000}` when the current focus session is valid but
+the editor did not expose a caret; the latter only animates the Server's existing
+host and must not create or reposition one. Blur uses `{0, -100000}`. For kinds
+0/1, `request_id` carries the root-owner HWND of the focused TSF context when
+available (zero otherwise); a no-caret pulse and blur use zero. The Server
+compares this window with the foreground window so TIPs hosted by a proxy process
+can still be shown only over their owning application. `wch`, `modifiers_down`,
+and the pinyin payload are zero/empty. It observes both IME-owned keys and
+application-owned English typing without changing whether a key is eaten. A
+client sends it only on an already activated, acknowledged Main route after
+capability negotiation; a missed optional event never resets input. UI-less hosts
+suppress the overlay. The consumer must validate the active client and activation
+epoch and must never interpret this event as a composition key.
+
 `CharacterSetShortcut` is optional and is not included in the default capability set.
 Windows implementations that support it pass `Capabilities | CharacterSetShortcut`
 to `Hello` / `Negotiate`. Only after negotiating this bit may a Chinese-mode client

@@ -5,6 +5,7 @@
 #include "global/globals.h"
 #include "log/ftb_diag_log.h"
 #include "window/candidate_presenter.h"
+#include "window/livesd_host.h"
 #include "window/floating_toolbar_presenter.h"
 #include "window/ime_windows.h"
 #include "window/tray_menu_presenter.h"
@@ -64,6 +65,7 @@ void ApplySmallWindowTopmostStep(SmallWindowTopmostStep step)
     {
     case SmallWindowTopmostStep::Candidate:
         PinHostTopmost(::global_hwnd);
+        LiveSDHost::SyncTopmost();
         if (CandidatePresenter::Instance().IsBound() && ::is_global_wnd_cand_shown && ::global_hwnd)
         {
             CandidatePresenter::Instance().Present();

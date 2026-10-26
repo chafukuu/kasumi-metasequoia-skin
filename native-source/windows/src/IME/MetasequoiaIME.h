@@ -6,6 +6,7 @@
 #include "DeferredKeyFailurePolicy.h"
 #include "char_classify.h"
 #include <atomic>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -150,6 +151,7 @@ constexpr UINT_PTR TIMER_FOCUS_CARET_STATE = 7;
 // below WM_PAINT, so with a timer the host repaints between slices.
 // The id must not collide with the constants above.
 constexpr UINT_PTR TIMER_COMMIT_REPLY_POLL = 8;
+constexpr UINT_PTR TIMER_LIVESD_ACTIVITY = 9;
 constexpr UINT COMMIT_REPLY_POLL_INTERVAL_MS = 1;
 // Runs after the focus status resend and the reconnect it may trigger, so the
 // Server has activated this client before the badge request arrives.
@@ -432,6 +434,11 @@ class CMetasequoiaIME : public ITfTextInputProcessorEx,
     // so an old worker/key message cannot commit into the next document.
     uint64_t _CaptureFocusSessionToken() const;
     bool _IsFocusSessionCurrent(uint64_t focusToken, _In_opt_ ITfContext *expectedContext = nullptr) const;
+    // Passive read-session completion; never edits text or owns a key.
+    void _CompleteLiveSDActivity(_In_ ITfContext *context, uint64_t focusToken, uint64_t focusGeneration,
+                                 uint64_t serial, unsigned pulses, unsigned enterActions,
+                                 const std::array<std::uint32_t, 32> &intervals, bool resolved, POINT caret,
+                                 HWND contextRootWindow);
     uint64_t _CaptureCompositionEpoch() const;
     bool _IsCompositionEpochCurrent(uint64_t compositionEpoch) const;
     bool _IsCompositionCurrent(_In_opt_ ITfComposition *expectedComposition) const;
@@ -754,6 +761,10 @@ class CMetasequoiaIME : public ITfTextInputProcessorEx,
 
     BOOL _InitKeyEventSink();
     void _UninitKeyEventSink();
+    void _ObserveLiveSDKey(_In_ ITfContext *context, WPARAM key, LPARAM keyData);
+    void _QueueLiveSDActivity(bool typingPulse = false, DWORD typingMessageTime = 0, bool enterAction = false);
+    void _RunLiveSDActivity();
+    void _CancelLiveSDActivity(bool sendBlur, bool keepPulses = false);
 
     BOOL _InitActiveLanguageProfileNotifySink();
     void _UninitActiveLanguageProfileNotifySink();
@@ -997,6 +1008,21 @@ class CMetasequoiaIME : public ITfTextInputProcessorEx,
     // not a key) and the probe pair always arrives adjacently.
     UINT _passthroughStatsVirtualKey;
     LONG _passthroughStatsMessageTime;
+
+    // All accessed on the TSF owner thread. Deferred reads own their context
+    // through CEditSessionBase and validate serial + focus before publishing.
+    uint64_t _liveSDSerial = 1;
+    bool _liveSDTimerArmed = false;
+    bool _liveSDReadPending = false;
+    unsigned _liveSDPulses = 0;
+    unsigned _liveSDEnterActions = 0;
+    std::array<std::uint32_t, 32> _liveSDPulseIntervals{};
+    bool _liveSDHasTypingMessageTime = false;
+    DWORD _liveSDLastTypingMessageTime = 0;
+    unsigned _liveSDCaretRetries = 0;
+    UINT _liveSDLastKey = 0;
+    LONG _liveSDLastKeyTime = 0;
+    LPARAM _liveSDLastKeyData = 0;
 
     // Bare Shift/Ctrl toggle arming (Weasel-style: release within timeout).
     bool _shiftHotkeyArmed;

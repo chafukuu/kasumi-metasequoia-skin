@@ -92,6 +92,12 @@ STDAPI CMetasequoiaIME::OnSetFocus(_In_ ITfDocumentMgr *pDocMgrFocus, _In_ ITfDo
                                  (pDocMgrFocus && !_IsSameComObject(pDocMgrFocus, _pDocMgrLastFocused));
     if (documentChanged)
     {
+        const FocusedField field = ResolveFocusedField(pDocMgrFocus);
+        // Chromium replaces document managers while inserting a character.
+        // Invalidate the old read, but keep numeric pulses for the same field.
+        const bool sameField = field.editable && _focusAnnouncementEditable && field.window &&
+                               field.window == _focusAnnouncementWindow;
+        _CancelLiveSDActivity(!sameField, sameField);
         // The badge belongs to the document it was shown for, even when
         // editors share an HWND (or expose none). This hides only the badge;
         // candidate and input state follow their own focus rules below.
@@ -214,6 +220,8 @@ STDAPI CMetasequoiaIME::OnSetFocus(_In_ ITfDocumentMgr *pDocMgrFocus, _In_ ITfDo
     }
 
     _InitTextEditSink(pDocMgrFocus);
+    if (pDocMgrFocus)
+        _QueueLiveSDActivity();
 
     _UpdateLanguageBarOnSetFocus(pDocMgrFocus);
 
@@ -337,6 +345,7 @@ void CMetasequoiaIME::_HandleFocusedContextStackChange(_In_opt_ ITfContext *chan
     }
 
     _ClearDeferredKeyDowns();
+    _CancelLiveSDActivity(true);
     SendHideCaretStateEventToUIProcessViaNamedPipe();
     // The pending smart-punctuation action was armed for the old top context;
     // the edit session that would consume it is about to be invalidated too.
@@ -345,6 +354,7 @@ void CMetasequoiaIME::_HandleFocusedContextStackChange(_In_opt_ ITfContext *chan
     const UINT resetToken = _localSessionResetToken.load(std::memory_order_acquire);
     _RequestLocalSessionReset(resetContext, resetToken);
     _InitTextEditSink(focusedDocument);
+    _QueueLiveSDActivity();
 
     resetContext->Release();
     focusedDocument->Release();

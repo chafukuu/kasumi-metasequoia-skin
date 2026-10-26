@@ -114,6 +114,7 @@ STDAPI CMetasequoiaIME::OnSetThreadFocus()
     {
         PostMessage(_msgWndHandle, WM_ThreadFocus, 0, 0);
     }
+    _QueueLiveSDActivity();
     // Some window switches surface only as thread focus, with no document
     // focus callback, so the return itself has to count.
     if (ShouldAnnounceThreadFocusReturn(_threadFocusLostForAnnouncement, _focusLostToWindowsTextInputHost))
@@ -147,6 +148,7 @@ STDAPI CMetasequoiaIME::OnSetThreadFocus()
 
 STDAPI CMetasequoiaIME::OnKillThreadFocus()
 {
+    _CancelLiveSDActivity(true);
     if (!IsNamedpipeFocusStateOwner(this) || !Global::g_connected)
     {
         return S_OK;

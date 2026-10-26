@@ -31,6 +31,10 @@ constexpr std::uint32_t CaretStateIndicator = 1u << 5;
 constexpr std::uint32_t TrilingualCycle = 1u << 6;
 constexpr std::uint32_t InputStateShortcuts = 1u << 7;
 constexpr std::uint32_t TemporaryJapaneseLongVowel = 1u << 8;
+// Optional, passive LiveSD focus/caret and typing pulses. Never changes input.
+constexpr std::uint32_t LiveSDActivity = 1u << 9;
+// Optional LiveSD cadence field in the TypingPulse modifiers_down slot.
+constexpr std::uint32_t LiveSDTypingCadence = 1u << 10;
 constexpr std::uint32_t Capabilities = RequestIds | FocusEpochs | FramedVoice;
 constexpr std::uint32_t RequiredCapabilities = RequestIds | FocusEpochs;
 

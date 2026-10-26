@@ -391,6 +391,7 @@ LRESULT CALLBACK CMetasequoiaIME_WindowProc(HWND hWnd, UINT message, WPARAM wPar
                 pIME->_ipcConsecutiveFailures = 0;
                 pIME->_TryLeaveServerUnavailableFallback();
                 SendCurrentImeStatusSnapshot(pIME);
+                pIME->_QueueLiveSDActivity();
                 pIME->_ScheduleDeferredKeyDownDrain();
                 break;
             }
@@ -400,6 +401,11 @@ LRESULT CALLBACK CMetasequoiaIME_WindowProc(HWND hWnd, UINT message, WPARAM wPar
         break;
     }
     case WM_TIMER: {
+        if (wParam == TIMER_LIVESD_ACTIVITY)
+        {
+            pIME->_RunLiveSDActivity();
+            break;
+        }
         if (wParam == TIMER_COMMIT_REPLY_POLL)
         {
             // A committing key could not settle its reply in the last slice, so
@@ -473,6 +479,7 @@ LRESULT CALLBACK CMetasequoiaIME_WindowProc(HWND hWnd, UINT message, WPARAM wPar
                 pIME->_ipcConsecutiveFailures = 0;
                 pIME->_TryLeaveServerUnavailableFallback();
                 SendCurrentImeStatusSnapshot(pIME);
+                pIME->_QueueLiveSDActivity();
                 pIME->_ScheduleDeferredKeyDownDrain();
                 break;
             }
@@ -512,6 +519,7 @@ LRESULT CALLBACK CMetasequoiaIME_WindowProc(HWND hWnd, UINT message, WPARAM wPar
         // there was no document-focus transition.
         pIME->_RefreshLanguageBarThemeIcons();
         SendCurrentImeStatusSnapshot(pIME);
+        pIME->_QueueLiveSDActivity();
         break;
     }
     case WM_DrainDeferredKeyDown: {

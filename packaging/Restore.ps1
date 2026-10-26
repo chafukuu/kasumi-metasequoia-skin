@@ -9,7 +9,8 @@
     - Renames the currently installed skin directory to
       <skin>.pre-restore-<timestamp> and copies the backed-up skin into place. New or
       user-added files are preserved in the renamed directory, not deleted.
-    - Restores config.toml and the Server image. Replaced current files are kept as
+    - Restores config.toml, the Server image and any TSF DLLs recorded by v0.5.7.
+      Replaced current files are kept as
       *.pre-restore-<timestamp>; nothing is recursively deleted.
     - Requests the IME's normal restart through the Aux named pipe (UTF-16LE
       "RestartServer") and verifies the replacement for 30 seconds. No process is
@@ -62,11 +63,14 @@ $ProgressPreference = 'SilentlyContinue'
 
 $script:SkinId = 'kasumi-adaptive'
 $script:ImeVersion = '0.11.1'
+$script:CompatibleImeVersions = @('0.11.1', '0.11.2')
 $script:ServerFileName = 'MetasequoiaImeServer.exe'
 $script:WatchdogFileName = 'MetasequoiaImeWatchdog.exe'
 $script:AuxPipeName = 'FanyImeAuxNamedPipe'
 $script:PackageId = 'kasumi-metasequoia-skin'
-$script:FinalServerSha256 = '143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E'
+$script:FinalServerSha256 = '082A48E4A48A4FE7F723FDE8F62C97C4C5DC386EB8F38B6F38195336B397EA2F'
+$script:PreviousV056ServerSha256 = '143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E'
+$script:KnownLiveSDServerSha256 = 'CCDC1552B1690CF56101F92D390C9E37D8DD3E6B261B286F31CB7B4222EA5133'
 $script:OfficialServerSha256 = '448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3'
 $script:LegacyDevServerSha256 = 'C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA'
 $script:PreviousV053V054ServerSha256 = 'F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C'
@@ -76,6 +80,8 @@ $script:AllowedServerHashes = @(
     $script:LegacyDevServerSha256,
     $script:PreviousV053V054ServerSha256,
     $script:PreviousV055ServerSha256,
+    $script:PreviousV056ServerSha256,
+    $script:KnownLiveSDServerSha256,
     $script:FinalServerSha256
 )
 $script:Utf8NoBom = [Text.UTF8Encoding]::new($false, $false)
@@ -389,9 +395,9 @@ function Get-UniqueSiblingPath {
 function Get-RestorePlan {
     param($Selected, $RegistryInfo)
     $detectedVersion = Get-DetectedImeVersion -RegistryInfo $RegistryInfo
-    if ($detectedVersion -ne $script:ImeVersion) {
+    if ($detectedVersion -notin $script:CompatibleImeVersions) {
         $shown = if ([string]::IsNullOrWhiteSpace($detectedVersion)) { '<unknown>' } else { $detectedVersion }
-        throw "Only Metasequoia IME $($script:ImeVersion) is supported; detected version: $shown"
+        throw "This package supports Metasequoia IME $($script:CompatibleImeVersions -join ' or '); detected version: $shown"
     }
 
     $rollback = $Selected.Rollback
@@ -455,6 +461,87 @@ function Get-RestorePlan {
         throw 'Config backup artifact is missing or does not match configBeforeSha256.'
     }
 
+    $tsfRestoreChanges = New-Object 'System.Collections.Generic.List[object]'
+    $tsfScheduledProperty = $rollback.PSObject.Properties['tsfReplacementScheduled']
+    if ($null -ne $tsfScheduledProperty -and [bool]$tsfScheduledProperty.Value) {
+        $versionDir = [string]$RegistryInfo.VersionDir
+        if ([string]::IsNullOrWhiteSpace($versionDir) -or $versionDir -notmatch '^msime_v[0-9]+(?:\.[0-9]+){1,3}$') {
+            throw 'Cannot infer the installed TSF version directory for rollback.'
+        }
+        $tsfX64Root = Join-Path (Join-Path $env:WINDIR 'System32\IME\MetasequoiaIME') $versionDir
+        $tsfX86Root = Join-Path (Join-Path $env:WINDIR 'SysWOW64\IME\MetasequoiaIME') $versionDir
+        foreach ($change in @($rollback.tsfChanges)) {
+            $architecture = [string]$change.architecture
+            $expectedPath = if ($architecture -eq 'x64') {
+                Join-Path $tsfX64Root 'MetasequoiaImeTsf.dll'
+            }
+            elseif ($architecture -eq 'x86') {
+                Join-Path $tsfX86Root 'MetasequoiaImeTsf.dll'
+            }
+            else { throw "rollback.json contains an unsupported TSF architecture: $architecture" }
+            $recordedPath = [string]$change.path
+            if (-not [string]::Equals([IO.Path]::GetFullPath($recordedPath), [IO.Path]::GetFullPath($expectedPath), [StringComparison]::OrdinalIgnoreCase)) {
+                throw "rollback.json TSF path does not match the registered $architecture location."
+            }
+            $beforeSha = [string]$change.beforeSha256
+            $afterSha = [string]$change.afterSha256
+            if ($beforeSha -notmatch '^[a-fA-F0-9]{64}$' -or $afterSha -notmatch '^[a-fA-F0-9]{64}$') {
+                throw "rollback.json has an invalid $architecture TSF hash."
+            }
+            $backupRelative = [string]$change.backupRelativePath
+            $expectedBackup = if ($architecture -eq 'x64') { 'tsf/MetasequoiaImeTsf-x64.dll' } else { 'tsf/MetasequoiaImeTsf-x86.dll' }
+            if ($backupRelative -ne $expectedBackup -or -not $artifacts.ContainsKey($backupRelative) -or
+                -not (Test-HashEqual $artifacts[$backupRelative].Sha256 $beforeSha)) {
+                throw "The $architecture TSF backup is missing or does not match its recorded hash."
+            }
+            if (Test-HashEqual $beforeSha $afterSha) { continue }
+            if (-not [IO.File]::Exists($expectedPath)) { throw "Installed $architecture TSF is missing: $expectedPath" }
+            Assert-NoReparsePoint -Path $expectedPath -Label "Installed $architecture TSF"
+            $currentTsfSha = Get-Sha256File -Path $expectedPath
+            $pendingStagePath = [string]$change.stagePath
+            if ($pendingStagePath) {
+                $pendingStagePath = [IO.Path]::GetFullPath($pendingStagePath)
+                if (-not [string]::Equals([IO.Path]::GetDirectoryName($pendingStagePath), [IO.Path]::GetDirectoryName($expectedPath), [StringComparison]::OrdinalIgnoreCase) -or
+                    -not $pendingStagePath.StartsWith($expectedPath + '.kasumi-', [StringComparison]::OrdinalIgnoreCase) -or
+                    -not $pendingStagePath.EndsWith('.new', [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "rollback.json contains an unsafe $architecture TSF staging path."
+                }
+            }
+            $pendingStageSha = $null
+            if ($pendingStagePath -and [IO.File]::Exists($pendingStagePath)) {
+                Assert-NoReparsePoint -Path $pendingStagePath -Label "Pending $architecture TSF"
+                $pendingStageSha = Get-Sha256File -Path $pendingStagePath
+                if (-not (Test-HashEqual $pendingStageSha $beforeSha) -and -not (Test-HashEqual $pendingStageSha $afterSha)) {
+                    throw "Pending $architecture TSF does not match either recorded version."
+                }
+            }
+            if (Test-HashEqual $currentTsfSha $beforeSha) {
+                if ($pendingStageSha -and (Test-HashEqual $pendingStageSha $afterSha)) {
+                    $tsfRestoreChanges.Add([pscustomobject]@{
+                            Architecture = $architecture
+                            Destination = $expectedPath
+                            Source = $artifacts[$backupRelative].FullPath
+                            BeforeSha256 = $currentTsfSha
+                            RestoreSha256 = $beforeSha
+                            PendingStagePath = $pendingStagePath
+                        })
+                }
+                continue
+            }
+            if (-not (Test-HashEqual $currentTsfSha $afterSha)) {
+                throw "The installed $architecture TSF is neither the recorded original nor release version; refusing to replace it."
+            }
+            $tsfRestoreChanges.Add([pscustomobject]@{
+                    Architecture = $architecture
+                    Destination = $expectedPath
+                    Source = $artifacts[$backupRelative].FullPath
+                    BeforeSha256 = $currentTsfSha
+                    RestoreSha256 = $beforeSha
+                    PendingStagePath = if ($pendingStageSha -and (Test-HashEqual $pendingStageSha $afterSha)) { $pendingStagePath } else { $null }
+                })
+        }
+    }
+
     $skinExistedProperty = $rollback.PSObject.Properties['skinExisted']
     if ($null -eq $skinExistedProperty -or $skinExistedProperty.Value -isnot [bool]) {
         throw 'rollback.json has no valid boolean skinExisted field.'
@@ -512,6 +599,7 @@ function Get-RestorePlan {
         CurrentConfigSha256 = $currentConfigSha
         ServerNeedsCopy = $serverNeedsCopy
         ServerBeforeSha256 = $serverBeforeSha
+        TsfRestoreChanges = @($tsfRestoreChanges.ToArray())
         ConfigBeforeSha256 = $configBeforeSha
         Stamp = $stamp
         SkinPreservePath = $skinPreservePath
@@ -555,6 +643,15 @@ using Microsoft.Win32.SafeHandles;
 public static class KasumiRestorePipeOwnerV1 {
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint id);
+}
+
+function Initialize-DelayedFileMoveType {
+    if ('KasumiRestoreDelayedFileMoveV1' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class KasumiRestoreDelayedFileMoveV1 {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
 }
 '@
 }
@@ -745,6 +842,75 @@ function Copy-FileAtomicVerified {
     }
 }
 
+function Schedule-TsfRestoreChanges {
+    param($Plan)
+    if ($Plan.TsfRestoreChanges.Count -eq 0) { return @() }
+    Initialize-DelayedFileMoveType
+    $scheduled = New-Object 'System.Collections.Generic.List[object]'
+    $staged = New-Object 'System.Collections.Generic.List[string]'
+    try {
+        foreach ($change in $Plan.TsfRestoreChanges) {
+            if ($change.PendingStagePath -and [IO.File]::Exists($change.PendingStagePath)) {
+                [IO.File]::Copy($change.Source, $change.PendingStagePath, $true)
+                if (-not (Test-HashEqual (Get-Sha256File -Path $change.PendingStagePath) $change.RestoreSha256)) {
+                    throw "Could not reset queued $($change.Architecture) TSF to its backup."
+                }
+                $scheduled.Add([pscustomobject]@{
+                        architecture = $change.Architecture
+                        path = $change.Destination
+                        beforeSha256 = $change.BeforeSha256
+                        restoreSha256 = $change.RestoreSha256
+                        stagePath = $change.PendingStagePath
+                        existingQueueReused = $true
+                    })
+                continue
+            }
+            $stagePath = $change.Destination + '.kasumi-restore-' + $Plan.Stamp + '.new'
+            if ([IO.File]::Exists($stagePath) -or [IO.Directory]::Exists($stagePath)) {
+                throw "TSF restore staging path already exists: $stagePath"
+            }
+            [IO.File]::Copy($change.Source, $stagePath, $false)
+            $staged.Add($stagePath)
+            if (-not (Test-HashEqual (Get-Sha256File -Path $stagePath) $change.RestoreSha256)) {
+                throw "Staged $($change.Architecture) TSF restore hash mismatch."
+            }
+            $flags = 0x1 -bor 0x4
+            if (-not [KasumiRestoreDelayedFileMoveV1]::MoveFileEx($stagePath, $change.Destination, $flags)) {
+                $code = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                throw "Could not queue the $($change.Architecture) TSF restore (Win32 $code)."
+            }
+            $scheduled.Add([pscustomobject]@{
+                    architecture = $change.Architecture
+                    path = $change.Destination
+                    beforeSha256 = $change.BeforeSha256
+                    restoreSha256 = $change.RestoreSha256
+                    stagePath = $stagePath
+                    existingQueueReused = $false
+                })
+        }
+        return @($scheduled.ToArray())
+    }
+    catch {
+        $queuedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $scheduled) {
+            [void]$queuedPaths.Add($entry.stagePath)
+            try {
+                [IO.File]::Copy($entry.path, $entry.stagePath, $true)
+                if (-not (Test-HashEqual (Get-Sha256File -Path $entry.stagePath) $entry.beforeSha256)) {
+                    throw "Could not reset queued $($entry.architecture) TSF to its current image."
+                }
+            }
+            catch { throw "TSF restore scheduling was incomplete, and its queued $($entry.architecture) replacement could not be reset: $($_.Exception.Message)" }
+        }
+        foreach ($stagePath in $staged) {
+            if (-not $queuedPaths.Contains($stagePath) -and [IO.File]::Exists($stagePath)) {
+                try { [IO.File]::Delete($stagePath) } catch { }
+            }
+        }
+        throw
+    }
+}
+
 function Invoke-RestoreTransaction {
     param($Plan)
     $preserved = [ordered]@{
@@ -828,6 +994,11 @@ function Invoke-RestoreTransaction {
         $health = Confirm-ServerHealth -ServerPid $newServer.Id -ServerPath $Plan.ServerPath -Since $restartSince -Seconds 30
         Write-Step "Restore restarted Server PID $($newServer.Id); 30-second health check passed."
 
+        $scheduledTsf = @(Schedule-TsfRestoreChanges -Plan $Plan)
+        if ($scheduledTsf.Count -gt 0) {
+            Write-Step 'The original TSF files are queued for the next Windows restart.'
+        }
+
         $result = [ordered]@{
             status = 'restored'
             restored = $true
@@ -835,6 +1006,9 @@ function Invoke-RestoreTransaction {
             backup = $Plan.BackupDirectory
             serverPid = $newServer.Id
             serverSha256 = $Plan.ServerBeforeSha256
+            tsfRestoreScheduled = ($scheduledTsf.Count -gt 0)
+            rebootRequired = ($scheduledTsf.Count -gt 0)
+            tsfChanges = $scheduledTsf
             health = $health
             preservedSkin = $preserved.skin
             preservedConfig = $preserved.config
@@ -900,6 +1074,9 @@ try {
         currentServerSha256 = $plan.CurrentServerSha256
         restoreServerSha256 = $plan.ServerBeforeSha256
         serverWillBeRestored = [bool]$plan.ServerNeedsCopy
+        tsfRestoreScheduled = [bool]($plan.TsfRestoreChanges.Count -gt 0)
+        rebootRequired = [bool]($plan.TsfRestoreChanges.Count -gt 0)
+        tsfFilesToRestore = $plan.TsfRestoreChanges.Count
         skinFilesToRestore = $plan.SkinFiles.Count
         skinDirectoryWillBePreserved = [bool]($null -ne $plan.SkinPreservePath)
         configWillBeRestored = $true

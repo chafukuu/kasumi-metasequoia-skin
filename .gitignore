@@ -1,5 +1,7 @@
 /dist/
 /build/
 /packaging/native/*.exe
+/packaging/native/*.dll
+/native/MetasequoiaImeServer.exe
 **/__pycache__/
 *.log

@@ -21,6 +21,7 @@
 #include "english/english_ime.h"
 #include "config/ime_config.h"
 #include "window/window_hook.h"
+#include "window/livesd_host.h"
 #include "session/session_factory.h"
 #include "log/candidate_diag_log.h"
 #include "log/ftb_diag_log.h"
@@ -261,7 +262,7 @@ void WorkerThread()
             continue;
         }
 
-        if (task.has_pipe_data)
+        if (task.has_pipe_data && task.type != TaskType::LiveSDActivity)
         {
             namedpipeData = task.pipe_data;
             ApplyUiLessFromPacket(namedpipeData);
@@ -323,6 +324,24 @@ void WorkerThread()
 
         case TaskType::HideCaretState:
             PostHideCaretState();
+            break;
+
+        case TaskType::LiveSDActivity:
+            // A TypingPulse may intentionally carry the unresolved-caret
+            // sentinel. LiveSDHost uses it only to animate the existing,
+            // already-owned companion window; it must never become a new
+            // placement anchor.
+            if (task.pipe_data.keycode == FanyImeLiveSDActivity::TypingPulse ||
+                task.pipe_data.keycode == FanyImeLiveSDActivity::EnterAction ||
+                task.pipe_data.keycode == FanyImeLiveSDActivity::Blur ||
+                (task.pipe_data.point[1] != Global::INVALID_Y &&
+                 MonitorFromPoint({task.pipe_data.point[0], task.pipe_data.point[1]}, MONITOR_DEFAULTTONULL)))
+                LiveSDHost::PostActivity({task.client_id,
+                                          task.activation_epoch,
+                                          task.pipe_data.keycode,
+                                          {task.pipe_data.point[0], task.pipe_data.point[1]},
+                                          reinterpret_cast<HWND>(static_cast<UINT_PTR>(task.pipe_data.request_id)),
+                                          task.pipe_data.modifiers_down});
             break;
 
         case TaskType::MoveCandidate: {
@@ -487,6 +506,7 @@ void WorkerThread()
         }
 
         case TaskType::ClientDeactivated: {
+            LiveSDHost::PostActivity({0, task.activation_epoch, 2, {}});
             CAND_DIAG_LOGF(L"client deactivated client={} epoch={}", task.client_id, task.activation_epoch);
             VoiceInput::SetImeActive(false);
             PostHideCaretState();
@@ -511,6 +531,7 @@ void WorkerThread()
         }
 
         case TaskType::ClientSuspended: {
+            LiveSDHost::PostActivity({0, task.activation_epoch, 2, {}});
             CAND_DIAG_LOGF(L"client suspended client={} epoch={}", task.client_id, task.activation_epoch);
             PostHideCaretState();
             // A suspension rotates the IPC focus session while the TIP may

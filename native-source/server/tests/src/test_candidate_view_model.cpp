@@ -1,9 +1,69 @@
 #include "window/candidate_item_geometry.h"
 #include "window/candidate_horizontal_placement.h"
+#include "window/candidate_card_placement.h"
 #include "window/candidate_view_model.h"
 #include "tests/includes/test_framework.h"
 
 #include <limits>
+
+TEST_CASE(candidate_card_edges_keep_text_in_work_area_at_all_supported_scales)
+{
+    for (const double scale : {1.0, 1.25, 1.5, 2.0})
+    {
+        // Negative coordinates, a left dock and a top taskbar are deliberate.
+        const FanyImeUi::CandidateWorkAreaPx work{-2500, -1320, -100, 0};
+        for (const int caretX : {work.left - 30, work.left, work.left + 1, work.right - 1, work.right + 30})
+            for (const int caretY : {work.top - 10, work.top + 1, work.top + 60, work.bottom - 1, work.bottom + 10})
+            {
+                const auto pos = FanyImeUi::PlaceCandidateCard(caretX, caretY, work, scale, 600.3, 75.7, 75.7);
+                REQUIRE(pos.has_value());
+                const int pad = static_cast<int>(std::round(2.0 * scale));
+                REQUIRE(pos->left >= work.left + pad);
+                REQUIRE(pos->left + std::ceil(600.3 * scale) <= work.right - pad);
+                REQUIRE(pos->top >= work.top + pad);
+                REQUIRE(pos->top + std::ceil(75.7 * scale) <= work.bottom - pad);
+                if (caretY == work.bottom - 1)
+                {
+                    REQUIRE(pos->above);
+                    REQUIRE(pos->top + std::ceil(75.7 * scale) <= caretY - std::round(24.0 * scale));
+                }
+                if (caretY == work.top + 60)
+                    REQUIRE(!pos->above);
+            }
+    }
+}
+
+TEST_CASE(candidate_card_tall_history_does_not_force_short_list_over_top_input_line)
+{
+    const auto pos = FanyImeUi::PlaceCandidateCard(400, 100, {0, 0, 800, 400}, 1.25, 200, 70, 350);
+    REQUIRE(pos.has_value());
+    REQUIRE(!pos->above);
+    REQUIRE_EQ(pos->top, 104);
+}
+
+TEST_CASE(candidate_card_fractional_bottom_fit_uses_full_ceil_height_and_dpi_padding)
+{
+    // At 125% the card needs 95 pixels, not 94. A bottom taskbar starts at 1040.
+    const auto fits = FanyImeUi::PlaceCandidateCard(100, 938, {0, 0, 1920, 1040}, 1.25, 400, 75.3, 75.3);
+    REQUIRE(fits.has_value());
+    REQUIRE(!fits->above);
+    REQUIRE_EQ(fits->top, 942);
+    const auto flips = FanyImeUi::PlaceCandidateCard(100, 939, {0, 0, 1920, 1040}, 1.25, 400, 75.3, 75.3);
+    REQUIRE(flips.has_value());
+    REQUIRE(flips->above);
+    REQUIRE_EQ(flips->top, 814);
+}
+
+TEST_CASE(candidate_card_rejects_invalid_geometry_and_handles_tiny_work_area)
+{
+    REQUIRE(!FanyImeUi::PlaceCandidateCard(0, 0, {0, 0, 10, 10}, 0.0, 1, 1, 1));
+    REQUIRE(!FanyImeUi::PlaceCandidateCard(0, 0, {0, 0, 10, 10}, 1.0, std::numeric_limits<double>::quiet_NaN(), 1, 1));
+    REQUIRE(!FanyImeUi::PlaceCandidateCard(0, 0, {0, 0, 0, 10}, 1.0, 1, 1, 1));
+    const auto tiny = FanyImeUi::PlaceCandidateCard(500, 500, {-1, -1, 0, 0}, 2.0, 20, 20, 20);
+    REQUIRE(tiny.has_value());
+    REQUIRE_EQ(tiny->left, -1);
+    REQUIRE_EQ(tiny->top, -1);
+}
 
 TEST_CASE(candidate_reserved_left_keeps_observed_growth_on_the_right)
 {

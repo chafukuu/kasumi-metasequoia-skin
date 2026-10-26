@@ -122,6 +122,19 @@ constexpr std::uint32_t PuncSwitch = 8;
 constexpr std::uint32_t DoubleSingleByteSwitch = 9;
 // Main, negotiated InputStateShortcuts: keycode is the stable input-state Action ID.
 constexpr std::uint32_t InputStateAction = 17;
+// Negotiated LiveSDActivity: keycode is FanyImeLiveSDActivity::Kind, point[]
+// is a physical caret anchor, and request_id carries the root owner HWND of the
+// focused TSF context (zero when unavailable; always zero for Blur). This lets
+// the Server verify the actual foreground window when TSF runs in a proxy host.
+// wch and pinyin are empty. For TypingPulse only, modifiers_down carries the
+// elapsed inter-keystroke interval in milliseconds (zero means unavailable);
+// it is not a keyboard modifier mask for this event. Focus requires a resolved point. A
+// TypingPulse may use {0, -100000} when the current focus session is valid but
+// the editor did not expose a caret; the Server must pulse only its existing
+// host and must not create or reposition one from that packet. EnterAction may
+// use the same sentinel when an existing host is already visible. Blur uses the
+// same sentinel and always has a zero request_id.
+constexpr std::uint32_t LiveSDActivity = 18;
 constexpr bool IsRouteDeactivation(std::uint32_t event_type)
 {
     return event_type == ClientDeactivated || event_type == ClientSuspended;
@@ -131,6 +144,26 @@ constexpr bool IsTerminalDeactivation(std::uint32_t event_type)
     return event_type == ClientDeactivated;
 }
 } // namespace FanyImePipeEventType
+
+namespace FanyImeLiveSDActivity
+{
+constexpr std::uint32_t Focus = 0;
+constexpr std::uint32_t TypingPulse = 1;
+constexpr std::uint32_t Blur = 2;
+// A physical Enter press; it triggers the configured aerial action without
+// being counted as an ordinary typing pulse.
+constexpr std::uint32_t EnterAction = 3;
+constexpr std::uint32_t MaximumTypingIntervalMs = 5000;
+constexpr int InvalidCaretY = -100000;
+constexpr bool AllowsMissingCaret(std::uint32_t kind)
+{
+    return kind == TypingPulse || kind == EnterAction;
+}
+constexpr bool IsKnownKind(std::uint32_t kind)
+{
+    return kind <= EnterAction;
+}
+} // namespace FanyImeLiveSDActivity
 
 // Why an IMESwitch badge was requested; carried in its wch field. Values are
 // append-only. A Server that predates a value treats it as UserToggle.

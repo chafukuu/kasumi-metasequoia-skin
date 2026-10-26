@@ -559,6 +559,73 @@ bool ReadBandArtwork(const toml::node *node, std::optional<BandArtwork> &out)
     return true;
 }
 
+bool ReadLiveSD(const toml::node *node, std::optional<LiveSD> &out)
+{
+    if (!node)
+    {
+        out.reset();
+        return true;
+    }
+    const auto *table = node->as_table();
+    if (!table)
+        return false;
+    std::optional<bool> enabled;
+    if (!ReadOptionalBool(*table, "enabled", enabled))
+        return false;
+    if (!enabled.value_or(true))
+    {
+        out.reset();
+        return true;
+    }
+    LiveSD value;
+    const auto readPng = [table](const char *key, std::string &path) {
+        if (!table->contains(key) || !ReadResource(*table, key, path))
+            return false;
+        auto extension = std::filesystem::u8path(path).extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return extension == ".png";
+    };
+    const auto readRange = [table](const char *key, double minimum, double maximum, double &number) {
+        return ReadSignedNumber(*table, key, maximum, number) && number >= minimum && number <= maximum;
+    };
+    if (table->contains("click_image") &&
+        (!ReadResource(*table, "click_image", value.clickImage) || !IsAnimatableImagePath(value.clickImage)))
+        return false;
+    if (!readRange("click_duration_ms", 300.0, 10000.0, value.clickDurationMs))
+        return false;
+    if (!readPng("idle_image", value.idleImage) || !readPng("idle2_image", value.idle2Image) ||
+        !readPng("happy_image", value.happyImage) || !readPng("miss_image", value.missImage) ||
+        !readRange("stage_width_dip", 200.0, 1000.0, value.stageWidthDip) ||
+        !readRange("stage_height_dip", 120.0, 500.0, value.stageHeightDip) ||
+        !readRange("width_dip", 40.0, 300.0, value.widthDip) ||
+        !readRange("height_dip", 46.0, 345.0, value.heightDip) ||
+        !readRange("foot_y_dip", 60.0, value.stageHeightDip - 4.0, value.footYDip) ||
+        value.stageWidthDip < value.widthDip + 24.0 || value.footYDip < value.heightDip + 20.0)
+        return false;
+    out = std::move(value);
+    return true;
+}
+
+// Resolve links with error-code overloads, so an otherwise safe relative path cannot escape the skin directory.
+bool IsContainedRegularResource(const std::filesystem::path &directory, const std::string &resource)
+{
+    std::error_code ec;
+    const auto root = std::filesystem::canonical(directory, ec);
+    if (ec)
+        return false;
+    const auto file = std::filesystem::canonical(directory / std::filesystem::u8path(resource), ec);
+    if (ec)
+        return false;
+    const auto relative = file.lexically_relative(root);
+    if (relative.empty() || relative.is_absolute())
+        return false;
+    for (const auto &part : relative)
+        if (part == ".." || part == ".")
+            return false;
+    return std::filesystem::is_regular_file(file, ec);
+}
+
 bool ReadTypedStars(const toml::node *node, std::optional<TypedStars> &out)
 {
     if (!node)
@@ -1135,6 +1202,12 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
         }
         if (package.schemaVersion >= 2)
         {
+            if (!ReadLiveSD(window->get("livesd"), package.liveSD))
+            {
+                SetError(error, "candidate_window.livesd requires four relative PNG images, finite stage/sprite "
+                                "sizes, and sufficient foot-anchor margins for jumping and swaying");
+                return std::nullopt;
+            }
             if (!ReadTypedStars(window->get("typed_stars"), package.typedStars))
             {
                 SetError(error, "candidate_window.typed_stars requires relative PNG images, finite ordered "
@@ -1356,6 +1429,20 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
                 if (!std::filesystem::is_regular_file(directory / std::filesystem::u8path(path), ec))
                 {
                     SetError(error, "candidate_window.typed_stars image file was not found");
+                    return std::nullopt;
+                }
+            }
+        }
+        if (package.liveSD)
+        {
+            for (const auto &path : {package.liveSD->idleImage, package.liveSD->idle2Image, package.liveSD->happyImage,
+                                     package.liveSD->missImage, package.liveSD->clickImage})
+            {
+                if (path.empty())
+                    continue;
+                if (!IsContainedRegularResource(directory, path))
+                {
+                    SetError(error, "candidate_window.livesd image must exist inside the skin directory");
                     return std::nullopt;
                 }
             }

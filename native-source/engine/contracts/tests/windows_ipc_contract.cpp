@@ -35,6 +35,32 @@ int main()
     std::memcpy(&legacy, bytes.data(), bytes.size());
     CHECK(legacy.client_id == 7);
     CHECK(FanyImePipeEventType::InputStateAction == 17);
+    CHECK(FanyImePipeEventType::LiveSDActivity == 18);
+    CHECK(FanyImeProtocol::LiveSDActivity == (1u << 9));
+    CHECK((FanyImeProtocol::LiveSDActivity & FanyImeProtocol::RequiredCapabilities) == 0);
+    CHECK(FanyImeProtocol::LiveSDTypingCadence == (1u << 10));
+    CHECK(FanyImeLiveSDActivity::MaximumTypingIntervalMs == 5000);
+    const auto liveSDCapabilities =
+        FanyImeProtocol::Capabilities | FanyImeProtocol::LiveSDActivity | FanyImeProtocol::LiveSDTypingCadence;
+    const auto liveSDHello = FanyImeProtocol::Hello(7, 125, liveSDCapabilities);
+    CHECK((FanyImeProtocol::Negotiate(liveSDHello).capabilities & FanyImeProtocol::LiveSDActivity) == 0);
+    CHECK((FanyImeProtocol::Negotiate(liveSDHello, liveSDCapabilities).capabilities &
+           FanyImeProtocol::LiveSDActivity) != 0);
+    CHECK((FanyImeProtocol::Negotiate(liveSDHello, liveSDCapabilities).capabilities &
+           FanyImeProtocol::LiveSDTypingCadence) != 0);
+    const auto oldLiveSDHello =
+        FanyImeProtocol::Hello(7, 127, FanyImeProtocol::Capabilities | FanyImeProtocol::LiveSDActivity);
+    CHECK((FanyImeProtocol::Negotiate(oldLiveSDHello, liveSDCapabilities).capabilities &
+           FanyImeProtocol::LiveSDTypingCadence) == 0);
+    CHECK((FanyImeProtocol::Negotiate(FanyImeProtocol::Hello(7, 126), liveSDCapabilities).capabilities &
+           FanyImeProtocol::LiveSDActivity) == 0);
+    CHECK(FanyImeLiveSDActivity::Focus == 0 && FanyImeLiveSDActivity::TypingPulse == 1 &&
+          FanyImeLiveSDActivity::Blur == 2 && FanyImeLiveSDActivity::EnterAction == 3);
+    CHECK(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Focus));
+    CHECK(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::TypingPulse));
+    CHECK(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Blur));
+    CHECK(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::EnterAction));
+    CHECK(FanyImeLiveSDActivity::IsKnownKind(3) && !FanyImeLiveSDActivity::IsKnownKind(4));
     CHECK(FanyImeProtocol::InputStateShortcuts == (1u << 7));
     CHECK(FanyImeProtocol::TemporaryJapaneseLongVowel == (1u << 8));
     const auto rCapabilities = FanyImeProtocol::Capabilities | FanyImeProtocol::TemporaryJapaneseLongVowel;

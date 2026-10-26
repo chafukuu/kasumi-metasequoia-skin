@@ -3,6 +3,7 @@
 #include "defines/globals.h"
 #include "ipc/ipc.h"
 #include "global/globals.h"
+#include "window/candidate_card_placement.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -517,53 +518,13 @@ int AdjustCandidateWindowPosition(                  //
     {
         scale = 1.0f;
     }
-    // Design offsets are DIPs so gaps stay visually stable under 150%/200% DPI.
-    const int caretGapPx = static_cast<int>(std::lround(3.0 * scale));
-    const int edgePadPx = static_cast<int>(std::lround(2.0 * scale));
-
-    properPos->first = point->x;
-    properPos->second = point->y + caretGapPx;
-    // minWidthDip: first-pass DOM measure can be far too narrow near a screen
-    // edge. Flip using at least that floor so the card is not parked at the
-    // caret with its real right half hanging off the monitor.
     const double widthDip = (std::max)(containerSize.first, minWidthDip);
-    int width = static_cast<int>(std::ceil(widthDip * scale));
-    // Decide whether to flip using the tallest vertical list seen so far. This
-    // keeps a short list above the caret when a full list would not fit below,
-    // avoiding a later below-to-above jump as more candidates appear. Position
-    // the flipped window using its *current* height, however, so its lower edge
-    // stays next to the current input line instead of preserving empty packing.
     const double decisionHeightDip = isVertical ? g_max_vertical_container_height_dip : containerSize.second;
-    const int decisionHeightPx = static_cast<int>(std::ceil(decisionHeightDip * scale));
-    const int currentHeightPx = static_cast<int>(std::ceil(containerSize.second * scale));
-    if (properPos->first + width > coordinates.right - edgePadPx)
-    {
-        properPos->first = coordinates.right - width - edgePadPx;
-    }
-    if (properPos->first < coordinates.left + edgePadPx)
-    {
-        properPos->first = coordinates.left + edgePadPx;
-    }
-    if (properPos->second < coordinates.top + edgePadPx)
-    {
-        properPos->second = coordinates.top + edgePadPx;
-    }
-
-    // Decide against the same lower limit every downstream clamp uses. Testing
-    // against the bare work-area bottom declared a card "fits below" that the
-    // edge pad then pushed back up — straight onto the caret's own text line.
-    if (properPos->second + decisionHeightPx > coordinates.bottom - edgePadPx)
-    {
-        // Point[1] is GetTextExt.bottom (the line's bottom). Sit the opaque card
-        // so its bottom meets the line's top — same for short and fully expanded
-        // lists. A fixed flipGap left a large hole under short above-caret cards.
-        const int lineHeightPx = static_cast<int>(std::lround(24.0 * scale));
-        properPos->second = point->y - currentHeightPx - lineHeightPx;
-        if (properPos->second < coordinates.top + edgePadPx)
-        {
-            properPos->second = coordinates.top + edgePadPx;
-        }
-    }
+    const auto position = FanyImeUi::PlaceCandidateCard(
+        point->x, point->y, {coordinates.left, coordinates.top, coordinates.right, coordinates.bottom}, scale, widthDip,
+        containerSize.second, decisionHeightDip);
+    properPos->first = position ? position->left : point->x;
+    properPos->second = position ? position->top : point->y;
     return 0;
 }
 

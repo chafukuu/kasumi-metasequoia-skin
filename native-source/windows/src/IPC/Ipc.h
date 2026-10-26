@@ -57,6 +57,11 @@ bool SupportsCompositionRestore();
 // （光标移动要靠它的回复落地），且不是 UILess 宿主。
 bool UsesHorizontalArrowSelection();
 bool SupportsCaretStateIndicator();
+bool SupportsLiveSDActivity();
+// Best effort on the already activated PIPE_NOWAIT Main. Never connects, waits,
+// resets text state, or uses the shared key-packet staging buffer.
+bool SendLiveSDActivityToUIProcess(UINT kind, POINT caret, HWND contextRootWindow = nullptr,
+                                   UINT typingIntervalMs = 0);
 bool SupportsTrilingualCycle();
 bool SupportsInputStateShortcuts();
 bool FlushNamedpipeFocusSessionReset();

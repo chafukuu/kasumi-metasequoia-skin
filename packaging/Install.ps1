@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Install the portable Kasumi (v0.5.6) native skin package for Metasequoia IME 0.11.1.
+    Install the portable Kasumi (v0.5.7) native skin and LiveSD package for Metasequoia IME 0.11.1.
 
 .DESCRIPTION
     - Verifies release-manifest.json and every package file before touching the
@@ -21,8 +21,9 @@
     - Performs a 30-second health check (same PID, named-pipe owner, no new
       Application Error event). On failure, restores the matching original
       Server, skin and config.
-    - Never downloads anything, never modifies DLLs, dictionaries or user input
-      history, and never starts the old companion helper.
+    - Never downloads anything or modifies dictionaries or user input history.
+      Matching x86/x64 TSF DLL updates are backed up and queued for the next Windows
+      restart; the old companion helper is never started.
 
     Supports -WhatIf. -WhatIf is read-only and does not require elevation; it
     also skips live process checks. A real install must run elevated.
@@ -61,26 +62,35 @@ $ProgressPreference = 'SilentlyContinue'
 $script:PackageRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $script:PackageId = 'kasumi-metasequoia-skin'
 $script:SkinId = 'kasumi-adaptive'
-$script:PackageVersion = '0.5.6'
+$script:PackageVersion = '0.5.7'
 $script:ImeVersion = '0.11.1'
+$script:CompatibleImeVersions = @('0.11.1', '0.11.2')
 $script:ServerFileName = 'MetasequoiaImeServer.exe'
 $script:WatchdogFileName = 'MetasequoiaImeWatchdog.exe'
 $script:AuxPipeName = 'FanyImeAuxNamedPipe'
 $script:OverlayStopEventName = 'Local\KasumiBandOverlay-stop-v1'
-$script:FinalServerSha256 = '143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E'
+$script:FinalServerSha256 = '082A48E4A48A4FE7F723FDE8F62C97C4C5DC386EB8F38B6F38195336B397EA2F'
+$script:FinalTsfX64Sha256 = 'D95EA046ECC903ADD6401FF12B39381CCCE6230D915DD5895306DFC96199D5C9'
+$script:FinalTsfX86Sha256 = '66DA662603E35184F514C7E3865F5F73EC29C32E071C4DC24394E5C005AD5FE5'
 $script:OfficialServerSha256 = '448264BABB98ECEB916094239A7613C3354BADE6E6897E2C7B9E6FC6606913D3'
 $script:LegacyDevServerSha256 = 'C36003A3E57AD38C2FED41E0E00DDEAECF548D44D25997C4CED7D9C591317EBA'
 $script:PreviousV053V054ServerSha256 = 'F29F375CB2127C4FFAEE0C18E3377D52CB0E433981E8E60248E0C26A1F95CA0C'
 $script:PreviousV055ServerSha256 = '8843586A53876C6F626995014D8045DCB800329CBEB1F23A5DDC3DE9FF3FF5DC'
+$script:PreviousV056ServerSha256 = '143A5433C46C1D22FFE79CA55AFAB4D688C013CE79969F7DB55AD79D5A6E4B3E'
+$script:KnownLiveSDServerSha256 = 'CCDC1552B1690CF56101F92D390C9E37D8DD3E6B261B286F31CB7B4222EA5133'
 $script:AllowedInstalledServerHashes = @(
     $script:OfficialServerSha256,
     $script:LegacyDevServerSha256,
     $script:PreviousV053V054ServerSha256,
     $script:PreviousV055ServerSha256,
+    $script:PreviousV056ServerSha256,
+    $script:KnownLiveSDServerSha256,
     $script:FinalServerSha256
 )
 $script:CriticalPackageFiles = @(
     'native/MetasequoiaImeServer.exe',
+    'native/MetasequoiaImeTsf-x64.dll',
+    'native/MetasequoiaImeTsf-x86.dll',
     'skin/kasumi-adaptive/skin.toml',
     'skin/kasumi-adaptive/assets/native-band-background.png',
     'skin/kasumi-adaptive/assets/native-band-foreground.png',
@@ -88,7 +98,13 @@ $script:CriticalPackageFiles = @(
     'skin/kasumi-adaptive/assets/guitar-swing.png',
     'skin/kasumi-adaptive/assets/star_b.png',
     'skin/kasumi-adaptive/assets/star_m.png',
-    'skin/kasumi-adaptive/assets/star_y.png'
+    'skin/kasumi-adaptive/assets/star_y.png',
+    'skin/kasumi-adaptive/assets/poppinparty-heads.png',
+    'skin/kasumi-adaptive/assets/livesd/click-reaction.gif',
+    'skin/kasumi-adaptive/assets/livesd/sd001001/anim001.png',
+    'skin/kasumi-adaptive/assets/livesd/sd001001/anim002.png',
+    'skin/kasumi-adaptive/assets/livesd/sd001001/anim003.png',
+    'skin/kasumi-adaptive/assets/livesd/sd001001/anim004.png'
 )
 $script:Utf8Strict = [Text.UTF8Encoding]::new($false, $true)
 $script:Utf8NoBom = [Text.UTF8Encoding]::new($false, $false)
@@ -327,6 +343,10 @@ function Read-ReleaseManifest {
     if ($minimumIme -ne $script:ImeVersion) {
         throw "This package requires Metasequoia IME $($script:ImeVersion)."
     }
+    $manifestCompatibleVersions = @(Get-RequiredPropertyValue -Object $manifest -Name 'compatibleImeVersions' | ForEach-Object { [string]$_ })
+    if (@(Compare-Object ($manifestCompatibleVersions | Sort-Object -Unique) ($script:CompatibleImeVersions | Sort-Object -Unique)).Count -ne 0) {
+        throw 'release-manifest.json compatibleImeVersions does not match the installer support list.'
+    }
 
     $nativeRelative = Normalize-PackageRelativePath -Path ([string](Get-RequiredPropertyValue -Object $manifest.native -Name 'path'))
     $nativeSha = [string](Get-RequiredPropertyValue -Object $manifest.native -Name 'sha256')
@@ -353,7 +373,7 @@ function Read-ReleaseManifest {
             throw "release-manifest.json lists a file that is not a deployable resource: $relative"
         }
         if ($relative.StartsWith('native/', [StringComparison]::OrdinalIgnoreCase) -and
-            $relative -ne 'native/MetasequoiaImeServer.exe') {
+            $relative -notin @('native/MetasequoiaImeServer.exe', 'native/MetasequoiaImeTsf-x64.dll', 'native/MetasequoiaImeTsf-x86.dll')) {
             throw "release-manifest.json contains an unexpected native payload: $relative"
         }
         if ($files.ContainsKey($relative)) {
@@ -386,6 +406,28 @@ function Read-ReleaseManifest {
     foreach ($critical in $script:CriticalPackageFiles) {
         if (-not $files.ContainsKey($critical)) {
             throw "release-manifest.json is missing a critical resource: $critical"
+        }
+    }
+    foreach ($expectedTsf in @(
+            [pscustomobject]@{ Path = 'native/MetasequoiaImeTsf-x64.dll'; Sha256 = $script:FinalTsfX64Sha256 },
+            [pscustomobject]@{ Path = 'native/MetasequoiaImeTsf-x86.dll'; Sha256 = $script:FinalTsfX86Sha256 }
+        )) {
+        if (-not (Test-HashEqual $files[$expectedTsf.Path].Sha256 $expectedTsf.Sha256)) {
+            throw "release-manifest.json does not describe the expected $($expectedTsf.Path) payload."
+        }
+    }
+    $nativeTsfEntries = @(Get-RequiredPropertyValue -Object $manifest.native -Name 'tsf')
+    if ($nativeTsfEntries.Count -ne 2) { throw 'release-manifest.json must declare exactly two TSF architecture payloads.' }
+    foreach ($expectedTsf in @(
+            [pscustomobject]@{ Architecture = 'x64'; Path = 'native/MetasequoiaImeTsf-x64.dll' },
+            [pscustomobject]@{ Architecture = 'x86'; Path = 'native/MetasequoiaImeTsf-x86.dll' }
+        )) {
+        $matches = @($nativeTsfEntries | Where-Object { [string]$_.architecture -eq $expectedTsf.Architecture })
+        if ($matches.Count -ne 1 -or [string]$matches[0].path -ne $expectedTsf.Path -or
+            -not (Test-HashEqual ([string]$matches[0].sha256) $files[$expectedTsf.Path].Sha256) -or
+            [long]$matches[0].size -ne $files[$expectedTsf.Path].Size -or
+            [string]$matches[0].update -ne 'delayed-until-windows-restart-if-needed') {
+            throw "release-manifest.json has an invalid $($expectedTsf.Architecture) TSF declaration."
         }
     }
 
@@ -424,18 +466,25 @@ function Read-ReleaseManifest {
         'image = "assets/guitar-swing.png"',
         'yellow_image = "assets/star_y.png"',
         'pink_image = "assets/star_m.png"',
-        'blue_image = "assets/star_b.png"'
+        'blue_image = "assets/star_b.png"',
+        '[candidate_window.livesd]',
+        'click_image = "assets/livesd/click-reaction.gif"',
+        'idle_image = "assets/livesd/sd001001/anim001.png"',
+        'idle2_image = "assets/livesd/sd001001/anim002.png"',
+        'happy_image = "assets/livesd/sd001001/anim003.png"',
+        'miss_image = "assets/livesd/sd001001/anim004.png"',
+        'image = "assets/poppinparty-heads.png"'
     )) {
         if (-not $tomlText.Contains($requiredText)) {
-            throw "skin.toml is missing required v0.5.6 content: $requiredText"
+            throw "skin.toml is missing required v0.5.7 content: $requiredText"
         }
     }
     if (-not [regex]::IsMatch($tomlText, '(?m)^[ \t]*single_line[ \t]*=[ \t]*true[ \t]*(?:#.*)?\r?$')) {
         throw 'skin.toml does not enable horizontal single_line.'
     }
     $decorationMatches = [regex]::Matches($tomlText, '(?m)^[ \t]*\[\[\s*candidate_window\s*\.\s*decorations\s*\]\]')
-    if ($decorationMatches.Count -ne 1) {
-        throw 'skin.toml must declare exactly one native guitar decoration.'
+    if ($decorationMatches.Count -ne 2) {
+        throw 'skin.toml must declare exactly one native guitar and one PoppinParty pendant decoration.'
     }
 
     return [pscustomobject]@{
@@ -610,9 +659,9 @@ function Get-InstallPreflight {
 
     $registry = Get-MetasequoiaRegistryInfo
     $detectedImeVersion = Get-DetectedImeVersion -RegistryInfo $registry
-    if ($detectedImeVersion -ne $script:ImeVersion) {
+    if ($detectedImeVersion -notin $script:CompatibleImeVersions) {
         $shown = if ([string]::IsNullOrWhiteSpace($detectedImeVersion)) { '<unknown>' } else { $detectedImeVersion }
-        throw "Only Metasequoia IME $($script:ImeVersion) is supported; detected version: $shown"
+        throw "This package supports Metasequoia IME $($script:CompatibleImeVersions -join ' or '); detected version: $shown"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ServerDirectoryOverride)) {
@@ -651,12 +700,19 @@ function Get-InstallPreflight {
 
     $serverPath = Join-Path $resolvedServerDirectory $script:ServerFileName
     $watchdogPath = Join-Path $resolvedServerDirectory $script:WatchdogFileName
+    if ([string]::IsNullOrWhiteSpace($registry.VersionDir) -or $registry.VersionDir -notmatch '^msime_v[0-9]+(?:\.[0-9]+){1,3}$') {
+        throw 'Cannot infer the installed TSF version directory from the Metasequoia registry.'
+    }
+    $tsfVersionRoot = Join-Path (Join-Path $env:WINDIR 'System32\IME\MetasequoiaIME') $registry.VersionDir
+    $tsfX64Path = Join-Path $tsfVersionRoot 'MetasequoiaImeTsf.dll'
+    $tsfX86Root = Join-Path (Join-Path $env:WINDIR 'SysWOW64\IME\MetasequoiaIME') $registry.VersionDir
+    $tsfX86Path = Join-Path $tsfX86Root 'MetasequoiaImeTsf.dll'
     $configPath = Join-Path $resolvedDataDirectory 'config.toml'
     $skinsDirectory = Join-Path $resolvedDataDirectory 'skins'
     $skinTargetPath = Join-Path $skinsDirectory $script:SkinId
     $backupRoot = Join-Path $resolvedDataDirectory 'kasumi-backups'
 
-    foreach ($required in @($serverPath, $watchdogPath, $configPath)) {
+    foreach ($required in @($serverPath, $watchdogPath, $configPath, $tsfX64Path, $tsfX86Path)) {
         if (-not [IO.File]::Exists($required)) { throw "Required installed file is missing: $required" }
         Assert-NoReparsePoint -Path $required -Label "Installed file $required"
     }
@@ -713,8 +769,28 @@ function Get-InstallPreflight {
         }
     }
 
+    $tsfChanges = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($spec in @(
+            [pscustomobject]@{ RelativePath = 'native/MetasequoiaImeTsf-x64.dll'; Destination = $tsfX64Path; Architecture = 'x64' },
+            [pscustomobject]@{ RelativePath = 'native/MetasequoiaImeTsf-x86.dll'; Destination = $tsfX86Path; Architecture = 'x86' }
+        )) {
+        $entry = $manifest.Files[$spec.RelativePath]
+        if ($null -eq $entry) { throw "Manifest is missing the TSF payload: $($spec.RelativePath)" }
+        $changed = -not (Test-HashEqual (Get-Sha256File -Path $spec.Destination) $entry.Sha256)
+        if ($changed) {
+            $tsfChanges.Add([pscustomobject]@{
+                    RelativePath = $spec.RelativePath
+                    Destination = $spec.Destination
+                    Source = $entry.FullPath
+                    Sha256 = $entry.Sha256
+                    Architecture = $spec.Architecture
+                    BeforeSha256 = Get-Sha256File -Path $spec.Destination
+                })
+        }
+    }
+
     $serverChanged = -not (Test-HashEqual $installedServerSha $script:FinalServerSha256)
-    $noop = (-not $serverChanged) -and (-not $configChanged) -and ($skinChanges.Count -eq 0)
+    $noop = (-not $serverChanged) -and (-not $configChanged) -and ($skinChanges.Count -eq 0) -and ($tsfChanges.Count -eq 0)
 
     return [pscustomobject]@{
         Manifest = $manifest
@@ -723,6 +799,8 @@ function Get-InstallPreflight {
         DataDirectory = $resolvedDataDirectory
         ServerPath = $serverPath
         WatchdogPath = $watchdogPath
+        TsfX64Path = $tsfX64Path
+        TsfX86Path = $tsfX86Path
         ConfigPath = $configPath
         SkinTargetPath = $skinTargetPath
         SkinsDirectory = $skinsDirectory
@@ -736,6 +814,7 @@ function Get-InstallPreflight {
         ConfigChangedKeys = @($configMerge.ChangedKeys)
         ServerChanged = $serverChanged
         SkinChanges = @($skinChanges.ToArray())
+        TsfChanges = @($tsfChanges.ToArray())
         Noop = $noop
     }
 }
@@ -785,6 +864,17 @@ using Microsoft.Win32.SafeHandles;
 public static class KasumiPackagePipeOwnerV1 {
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint id);
+}
+'@
+}
+
+function Initialize-DelayedFileMoveType {
+    if ('KasumiInstallDelayedFileMoveV1' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class KasumiInstallDelayedFileMoveV1 {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
 }
 '@
 }
@@ -1003,6 +1093,25 @@ function New-InstallBackup {
         sha256 = $serverBackupHash
     })
 
+    foreach ($tsf in @(
+            [pscustomobject]@{ Source = $State.TsfX64Path; Relative = 'tsf/MetasequoiaImeTsf-x64.dll' },
+            [pscustomobject]@{ Source = $State.TsfX86Path; Relative = 'tsf/MetasequoiaImeTsf-x86.dll' }
+        )) {
+        $destination = Join-Path $backupDirectory $tsf.Relative.Replace('/', '\')
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+        [IO.File]::Copy($tsf.Source, $destination, $false)
+        $sourceHash = Get-Sha256File -Path $tsf.Source
+        $backupHash = Get-Sha256File -Path $destination
+        if (-not (Test-HashEqual $sourceHash $backupHash)) {
+            throw "TSF backup hash mismatch: $($tsf.Source)"
+        }
+        $backupFiles.Add([pscustomobject]@{
+            relativePath = Get-BackupRelativePath -BackupDirectory $backupDirectory -Path $destination
+            size = (Get-Item -LiteralPath $destination).Length
+            sha256 = $backupHash
+        })
+    }
+
     $configBackupPath = Join-Path $backupDirectory 'config.toml.before'
     [IO.File]::WriteAllBytes($configBackupPath, $State.ConfigBytes)
     $configBackupHash = Get-Sha256File -Path $configBackupPath
@@ -1039,6 +1148,11 @@ function New-InstallBackup {
         serverBackupRelativePath = 'server/MetasequoiaImeServer.exe'
         serverWasReplaced = $false
         previousServerPath = $null
+        tsfWasReplaced = $false
+        tsfReplacementScheduled = $false
+        tsfPaths = @($State.TsfX64Path, $State.TsfX86Path)
+        tsfBackupRelativePaths = @('tsf/MetasequoiaImeTsf-x64.dll', 'tsf/MetasequoiaImeTsf-x86.dll')
+        tsfChanges = @()
         skinPath = $State.SkinTargetPath
         skinExisted = $skinExisted
         skinBackupRelativeDirectory = $(if ($skinExisted) { "skin/$($script:SkinId)" } else { $null })
@@ -1116,6 +1230,75 @@ function Replace-InstalledServer {
     $newHash = Get-Sha256File -Path $State.ServerPath
     if (-not (Test-HashEqual $newHash $script:FinalServerSha256)) {
         throw 'Installed Server image hash does not match the release manifest.'
+    }
+}
+
+function Stage-TsfChanges {
+    param($State, $Transaction)
+    $staged = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($change in $State.TsfChanges) {
+        if (-not (Test-HashEqual (Get-Sha256File -Path $change.Destination) $change.BeforeSha256)) {
+            throw "Installed $($change.Architecture) TSF changed after preflight; refusing to queue its replacement."
+        }
+        $stagePath = $change.Destination + '.kasumi-' + $Transaction.Timestamp + '.new'
+        if ([IO.File]::Exists($stagePath) -or [IO.Directory]::Exists($stagePath)) {
+            throw "TSF staging path already exists: $stagePath"
+        }
+        [IO.File]::Copy($change.Source, $stagePath, $false)
+        if (-not (Test-HashEqual (Get-Sha256File -Path $stagePath) $change.Sha256)) {
+            throw "Staged $($change.Architecture) TSF hash mismatch."
+        }
+        $staged.Add([pscustomobject]@{
+                RelativePath = $change.RelativePath
+                Architecture = $change.Architecture
+                Destination = $change.Destination
+                Source = $stagePath
+                BeforeSha256 = $change.BeforeSha256
+                AfterSha256 = $change.Sha256
+                BackupRelativePath = if ($change.Architecture -eq 'x64') { 'tsf/MetasequoiaImeTsf-x64.dll' } else { 'tsf/MetasequoiaImeTsf-x86.dll' }
+            })
+        $Transaction.TsfStaged = @($staged.ToArray())
+    }
+    return $Transaction.TsfStaged
+}
+
+function Schedule-TsfChanges {
+    param($Transaction)
+    if ($Transaction.TsfStaged.Count -eq 0) { return @() }
+    Initialize-DelayedFileMoveType
+    $scheduled = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($change in $Transaction.TsfStaged) {
+        if (-not (Test-HashEqual (Get-Sha256File -Path $change.Destination) $change.BeforeSha256)) {
+            throw "Installed $($change.Architecture) TSF changed before scheduling; refusing to continue."
+        }
+        # TSF DLLs are commonly loaded by Explorer and other open applications.
+        # Queue an atomic same-volume replacement for the next Windows start.
+        $flags = 0x1 -bor 0x4
+        if (-not [KasumiInstallDelayedFileMoveV1]::MoveFileEx($change.Source, $change.Destination, $flags)) {
+            $code = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw "Could not queue the $($change.Architecture) TSF replacement (Win32 $code)."
+        }
+        $Transaction.TsfScheduledCount++
+        $scheduled.Add([pscustomobject]@{
+                architecture = $change.Architecture
+                path = $change.Destination
+                stagePath = $change.Source
+                beforeSha256 = $change.BeforeSha256
+                afterSha256 = $change.AfterSha256
+                backupRelativePath = $change.BackupRelativePath
+            })
+    }
+    return @($scheduled.ToArray())
+}
+
+function Remove-UnscheduledTsfStages {
+    param($Transaction)
+    $items = @($Transaction.TsfStaged)
+    for ($index = [int]$Transaction.TsfScheduledCount; $index -lt $items.Count; $index++) {
+        $change = $items[$index]
+        if ($change.Source -and [IO.File]::Exists($change.Source)) {
+            try { [IO.File]::Delete($change.Source) } catch { }
+        }
     }
 }
 
@@ -1404,6 +1587,8 @@ function Invoke-InstallTransaction {
         FailedSkinPath = $null
         FailedConfigPath = $null
         FailedServerPath = $null
+        TsfStaged = @()
+        TsfScheduledCount = 0
     }
     try {
         [void](Get-BackupFileMap -Rollback $backup.Rollback -BackupDirectory $backup.Directory)
@@ -1415,6 +1600,7 @@ function Invoke-InstallTransaction {
 
         Assert-WatchdogRunning -State $State
         $overlaysStopped = Stop-ValidatedLegacyOverlays -State $State
+        [void](Stage-TsfChanges -State $State -Transaction $transaction)
 
         if ($State.SkinChanges.Count -gt 0) {
             Write-Step "Installing $($State.SkinChanges.Count) skin file(s)..."
@@ -1444,6 +1630,18 @@ function Invoke-InstallTransaction {
         $backup.Rollback.serverWasReplaced = $transaction.ServerReplaced
         $backup.Rollback.previousServerPath = $transaction.PreviousServerPath
         $backup.Rollback.status = 'files-installed'
+        $backup.Rollback.tsfReplacementScheduled = $false
+        $backup.Rollback.tsfStagePaths = @($transaction.TsfStaged | ForEach-Object { $_.Source })
+        $backup.Rollback.tsfChanges = @($transaction.TsfStaged | ForEach-Object {
+                [pscustomobject]@{
+                    architecture = $_.Architecture
+                    path = $_.Destination
+                    stagePath = $_.Source
+                    beforeSha256 = $_.BeforeSha256
+                    afterSha256 = $_.AfterSha256
+                    backupRelativePath = $_.BackupRelativePath
+                }
+            })
         Write-JsonAtomic -Path $backup.RollbackPath -Object $backup.Rollback
 
         Write-Step 'Requesting the IME normal restart through the Aux pipe...'
@@ -1451,9 +1649,19 @@ function Invoke-InstallTransaction {
         $restart = Invoke-RestartAndHealth -ServerPath $State.ServerPath -WatchdogPath $State.WatchdogPath -OldProcess $oldProcess
         Write-Step "Server restarted as PID $($restart.ServerPid); 30-second health check passed."
 
+        $scheduledTsfChanges = @(Schedule-TsfChanges -Transaction $transaction)
+        if ($scheduledTsfChanges.Count -gt 0) {
+            Write-Step 'The TSF updates are queued for the next Windows restart; the current input session remains usable.'
+        }
+        $backup.Rollback.tsfReplacementScheduled = ($scheduledTsfChanges.Count -gt 0)
+        $backup.Rollback.tsfChanges = $scheduledTsfChanges
+
         $backup.Rollback.status = 'completed'
         $backup.Rollback.serverWasReplaced = $transaction.ServerReplaced
         $backup.Rollback.previousServerPath = $transaction.PreviousServerPath
+        $backup.Rollback.tsfReplacementScheduled = ($scheduledTsfChanges.Count -gt 0)
+        $backup.Rollback.tsfStagePaths = @($transaction.TsfStaged | ForEach-Object { $_.Source })
+        $backup.Rollback.tsfChanges = $scheduledTsfChanges
         $backup.Rollback.completedUtc = [DateTime]::UtcNow.ToString('o')
         $backup.Rollback['health'] = $restart.Health
         Write-JsonAtomic -Path $backup.RollbackPath -Object $backup.Rollback
@@ -1469,6 +1677,9 @@ function Invoke-InstallTransaction {
             rollback = $backup.RollbackPath
             health = $restart.Health
             serverReplaced = $transaction.ServerReplaced
+            tsfReplacementScheduled = ($scheduledTsfChanges.Count -gt 0)
+            rebootRequired = ($scheduledTsfChanges.Count -gt 0)
+            tsfChanges = $scheduledTsfChanges
             configChangedKeys = @($State.ConfigChangedKeys)
             skinFilesCopied = $State.SkinChanges.Count
             legacyOverlaysStopped = $overlaysStopped
@@ -1480,6 +1691,29 @@ function Invoke-InstallTransaction {
     }
     catch {
         $reason = $_.Exception.Message
+        if ($transaction.TsfScheduledCount -gt 0) {
+            foreach ($change in @($transaction.TsfStaged | Select-Object -First $transaction.TsfScheduledCount)) {
+                $backupEntry = $backup.Rollback.backupFiles | Where-Object { $_.relativePath -eq $change.BackupRelativePath } | Select-Object -First 1
+                if ($null -eq $backupEntry) { throw "Scheduled TSF update could not be rolled back because its backup is missing: $($change.BackupRelativePath)" }
+                $backupPath = Join-Path $backup.Directory $backupEntry.relativePath.Replace('/', '\')
+                [IO.File]::Copy($backupPath, $change.Source, $true)
+                if (-not (Test-HashEqual (Get-Sha256File -Path $change.Source) $change.BeforeSha256)) {
+                    throw "Scheduled TSF update could not be reset to its backup: $($change.Architecture)"
+                }
+            }
+            $backup.Rollback.tsfReplacementScheduled = $true
+            $backup.Rollback.tsfChanges = @($transaction.TsfStaged | Select-Object -First $transaction.TsfScheduledCount | ForEach-Object {
+                    [pscustomobject]@{
+                        architecture = $_.Architecture
+                        path = $_.Destination
+                        stagePath = $_.Source
+                        beforeSha256 = $_.BeforeSha256
+                        afterSha256 = $_.BeforeSha256
+                        backupRelativePath = $_.BackupRelativePath
+                    }
+                })
+            $reason += ' A queued TSF replacement was reset to its backed-up original for the next Windows restart.'
+        }
         if ($transaction.SkinTouched -or $transaction.ConfigTouched -or $transaction.ServerReplaced) {
             Invoke-AutoRollback -State $State -Transaction $transaction -Backup $backup -Reason $reason
         }
@@ -1499,6 +1733,9 @@ function Invoke-InstallTransaction {
             Write-JsonAtomic -Path (Join-Path $backup.Directory 'failure.json') -Object $failure
             throw
         }
+    }
+    finally {
+        if ($transaction.TsfScheduledCount -eq 0) { Remove-UnscheduledTsfStages -Transaction $transaction }
     }
 }
 
@@ -1558,6 +1795,9 @@ try {
         serverWillBeReplaced = $state.ServerChanged
         configChangedKeys = @($state.ConfigChangedKeys)
         skinFilesToWrite = @($state.SkinChanges | ForEach-Object { $_.RelativePath })
+        tsfFilesToWrite = @($state.TsfChanges | ForEach-Object { $_.RelativePath })
+        tsfReplacementScheduled = [bool]($state.TsfChanges.Count -gt 0)
+        rebootRequired = [bool]($state.TsfChanges.Count -gt 0)
         backupRoot = $state.BackupRoot
         helperStarted = $false
     }

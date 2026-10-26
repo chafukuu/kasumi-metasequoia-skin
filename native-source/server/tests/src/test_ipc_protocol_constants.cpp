@@ -168,6 +168,20 @@ TEST_CASE(ipc_hide_caret_state_is_append_only_and_not_a_candidate_or_route_reset
     REQUIRE_EQ(sizeof(FanyImeNamedpipeData), 304u);
 }
 
+TEST_CASE(ipc_livesd_enter_action_is_an_appended_optional_activity_kind)
+{
+    REQUIRE_EQ(FanyImePipeEventType::LiveSDActivity, 18u);
+    REQUIRE_EQ(FanyImeLiveSDActivity::Focus, 0u);
+    REQUIRE_EQ(FanyImeLiveSDActivity::TypingPulse, 1u);
+    REQUIRE_EQ(FanyImeLiveSDActivity::Blur, 2u);
+    REQUIRE_EQ(FanyImeLiveSDActivity::EnterAction, 3u);
+    REQUIRE(FanyImeLiveSDActivity::IsKnownKind(FanyImeLiveSDActivity::EnterAction));
+    REQUIRE(!FanyImeLiveSDActivity::IsKnownKind(FanyImeLiveSDActivity::EnterAction + 1u));
+    REQUIRE(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::EnterAction));
+    REQUIRE(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Focus));
+    REQUIRE(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Blur));
+}
+
 TEST_CASE(ipc_uiless_flag_is_outside_key_modifier_mask)
 {
     REQUIRE_EQ(FanyImePipeFlags::UiLess, 0x80000000u);

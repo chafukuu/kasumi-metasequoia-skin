@@ -885,6 +885,7 @@ STDAPI CMetasequoiaIME::OnTestKeyDown(ITfContext *pContext, WPARAM wParam, LPARA
     }
     PerfTimer onTestKeyDownTimer;
     Global::UpdateModifiers(wParam, lParam);
+    _ObserveLiveSDKey(pContext, wParam, lParam);
     _TrackModifierHotkeyArming(wParam, lParam, false);
     if (IsShiftVk(LOWORD(wParam)))
     {
@@ -1042,6 +1043,7 @@ STDAPI CMetasequoiaIME::OnKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM lP
         _QueueCapsLockEdge(true);
     }
     PerfTimer onKeyDownTimer;
+    _ObserveLiveSDKey(pContext, wParam, lParam);
     const uint64_t focusGeneration = _deferredKeyFocusGeneration;
     (void)_DispatchKeyDown(pContext, wParam, lParam, pIsEaten, nullptr, nullptr, nullptr, true, focusGeneration);
     // Some hosts offer the actual callback without a preceding test.

@@ -156,6 +156,7 @@ enum class TaskType
     ShowCandidate,
     HideCandidate,
     HideCaretState,
+    LiveSDActivity,
     MoveCandidate,
     ImeKeyEvent,
     LangbarRightClick,

@@ -1,7 +1,7 @@
 schema_version = 2
 id = "kasumi-adaptive"
 name = "Kasumi Adaptive"
-version = "0.5.6"
+version = "0.5.7"
 author = "Kasumi"
 description = "Fixed artwork at 0.75 of v0.5.2; font 15, right portrait 90% and raised 10 DIP. Native item edges drive frets."
 base = "canvas"
@@ -157,3 +157,26 @@ rotation_min_deg = -24
 rotation_max_deg = 24
 spin_min_deg = -70
 spin_max_deg = 70
+[candidate_window.livesd]
+click_image = "assets/livesd/click-reaction.gif"
+click_duration_ms = 1600
+enabled = true
+idle_image = "assets/livesd/sd001001/anim001.png"
+idle2_image = "assets/livesd/sd001001/anim002.png"
+happy_image = "assets/livesd/sd001001/anim003.png"
+miss_image = "assets/livesd/sd001001/anim004.png"
+stage_width_dip = 520
+stage_height_dip = 246
+width_dip = 161.28
+height_dip = 185.472
+foot_y_dip = 233
+
+# Foreground pendant beneath the text row; no hit testing.
+[[candidate_window.decorations]]
+image = "assets/poppinparty-heads.png"
+anchor = "top-left"
+offset_x_dip = 147.6
+offset_y_dip = 32.5
+width_dip = 179.2
+height_dip = 35.84
+z_index = 3

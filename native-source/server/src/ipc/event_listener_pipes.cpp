@@ -228,6 +228,7 @@ bool IsKnownMainPipeEvent(UINT event_type)
     case FanyImePipeEventType::ClientSuspended:
     case FanyImePipeEventType::FocusRestored:
     case FanyImePipeEventType::HideCaretState:
+    case FanyImePipeEventType::LiveSDActivity:
         return true;
     default:
         return false;
@@ -236,6 +237,23 @@ bool IsKnownMainPipeEvent(UINT event_type)
 
 bool IsValidMainPipeFrame(const FanyImeNamedpipeData &pipe_data)
 {
+    if (pipe_data.event_type == FanyImePipeEventType::LiveSDActivity)
+    {
+        const bool missingCaret = pipe_data.point[1] == FanyImeLiveSDActivity::InvalidCaretY;
+        if (!FanyImeLiveSDActivity::IsKnownKind(pipe_data.keycode) ||
+            (pipe_data.keycode == FanyImeLiveSDActivity::Blur &&
+             (pipe_data.request_id != 0 || pipe_data.point[0] != 0 || !missingCaret)) ||
+            (pipe_data.keycode != FanyImeLiveSDActivity::Blur &&
+             !FanyImeLiveSDActivity::AllowsMissingCaret(pipe_data.keycode) && missingCaret) ||
+            (FanyImeLiveSDActivity::AllowsMissingCaret(pipe_data.keycode) && missingCaret &&
+             (pipe_data.request_id != 0 || pipe_data.point[0] != 0)) ||
+            pipe_data.wch != 0 ||
+            (pipe_data.keycode != FanyImeLiveSDActivity::TypingPulse && pipe_data.modifiers_down != 0) ||
+            (pipe_data.keycode == FanyImeLiveSDActivity::TypingPulse &&
+             pipe_data.modifiers_down > FanyImeLiveSDActivity::MaximumTypingIntervalMs) ||
+            pipe_data.pinyin_length != 0)
+            return false;
+    }
     if (!IsKnownMainPipeEvent(pipe_data.event_type) || pipe_data.pinyin_length < 0 ||
         pipe_data.pinyin_length >= static_cast<int>(std::size(pipe_data.pinyin_string)) ||
         pipe_data.pinyin_string[std::size(pipe_data.pinyin_string) - 1] != L'\0' ||
@@ -603,6 +621,16 @@ void MainPipeClientThread(HANDLE clientPipe, uint64_t handlerId)
 
         case FanyImePipeEventType::HideCaretState: {
             EnqueueTask(TaskType::HideCaretState, pipeData, activation.epoch);
+            break;
+        }
+
+        case FanyImePipeEventType::LiveSDActivity: {
+            if (ClientNegotiatedLiveSDActivity(clientId))
+            {
+                if (!ClientNegotiatedLiveSDTypingCadence(clientId))
+                    pipeData.modifiers_down = 0;
+                EnqueueTask(TaskType::LiveSDActivity, pipeData, activation.epoch);
+            }
             break;
         }
 

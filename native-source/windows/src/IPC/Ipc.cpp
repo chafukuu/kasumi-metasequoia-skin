@@ -512,7 +512,8 @@ bool WritePipeHello(HANDLE hPipeHandle, UINT pipeRole)
                                    FanyImeProtocol::Capabilities | FanyImeProtocol::CharacterSetShortcut |
                                        FanyImeProtocol::CompositionRestore | FanyImeProtocol::CaretStateIndicator |
                                        FanyImeProtocol::TrilingualCycle | FanyImeProtocol::InputStateShortcuts |
-                                       FanyImeProtocol::TemporaryJapaneseLongVowel);
+                                       FanyImeProtocol::TemporaryJapaneseLongVowel | FanyImeProtocol::LiveSDActivity |
+                                       FanyImeProtocol::LiveSDTypingCadence);
         BOOL ret = WriteFile(hPipeHandle, &hello, sizeof(hello), &bytesWritten, NULL);
         // Never authorize keys from merely writing a hello. An old Server
         // without negotiation times out into the existing raw-input fallback.
@@ -996,6 +997,51 @@ bool SupportsCaretStateIndicator()
 {
     return hPipe && hPipe != INVALID_HANDLE_VALUE &&
            (negotiatedServerCapabilities & FanyImeProtocol::CaretStateIndicator) != 0;
+}
+
+bool SupportsLiveSDActivity()
+{
+    return IsValidPipeHandle(hPipe) && (negotiatedServerCapabilities & FanyImeProtocol::LiveSDActivity) != 0;
+}
+
+bool SendLiveSDActivityToUIProcess(UINT kind, POINT caret, HWND contextRootWindow, UINT typingIntervalMs)
+{
+    if (!SupportsLiveSDActivity() || !FanyImeLiveSDActivity::IsKnownKind(kind) || !Global::g_connected ||
+        Global::IsUiLessMode() || IsLocalSessionResetPending() || !IsExpectedWorkerFocusAcknowledged() ||
+        (boundFocusResetPending && *boundFocusResetPending) || (boundActivationRequired && *boundActivationRequired))
+    {
+        return false;
+    }
+    // Focus must establish a real anchor. A pulse or Enter action may
+    // intentionally have no caret so the Server animates an already displayed
+    // host without creating or relocating it; Blur has its own sentinel payload.
+    if (caret.y == FanyImeLiveSDActivity::InvalidCaretY && kind != FanyImeLiveSDActivity::Blur &&
+        !FanyImeLiveSDActivity::AllowsMissingCaret(kind))
+        return false;
+    if (FanyImeLiveSDActivity::AllowsMissingCaret(kind) && caret.y == FanyImeLiveSDActivity::InvalidCaretY)
+    {
+        // Keep the no-caret representation canonical even if a future caller
+        // passes a stale context window or x coordinate along with the sentinel.
+        caret.x = 0;
+        contextRootWindow = nullptr;
+    }
+    FanyImeNamedpipeData packet{};
+    packet.client_id = GetPipeClientId();
+    packet.event_type = FanyImePipeEventType::LiveSDActivity;
+    packet.keycode = kind;
+    packet.modifiers_down = kind == FanyImeLiveSDActivity::TypingPulse &&
+                                    (negotiatedServerCapabilities & FanyImeProtocol::LiveSDTypingCadence) != 0
+                                ? (std::min)(typingIntervalMs, FanyImeLiveSDActivity::MaximumTypingIntervalMs)
+                                : 0;
+    packet.request_id = kind == FanyImeLiveSDActivity::Blur
+                            ? 0
+                            : static_cast<std::uint64_t>(reinterpret_cast<UINT_PTR>(contextRootWindow));
+    packet.point[0] = kind == FanyImeLiveSDActivity::Blur ? 0 : caret.x;
+    packet.point[1] = kind == FanyImeLiveSDActivity::Blur ? FanyImeLiveSDActivity::InvalidCaretY : caret.y;
+    DWORD written = 0;
+    // Main was opened with PIPE_NOWAIT. A full quota drops decoration only;
+    // optional activity must never tear down or delay the user's input.
+    return WriteFile(hPipe, &packet, sizeof(packet), &written, nullptr) && written == sizeof(packet);
 }
 
 bool SupportsTrilingualCycle()

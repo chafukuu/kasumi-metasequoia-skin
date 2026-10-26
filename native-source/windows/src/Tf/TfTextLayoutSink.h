@@ -5,7 +5,8 @@
 class CMetasequoiaIME;
 
 POINT GetPhysicalTextAnchor(_In_ ITfContextView *pContextView, _In_ const RECT &textExtent);
-bool ResolveCollapsedSelectionAnchor(_In_ ITfContext *context, TfEditCookie editCookie, _Out_ POINT *anchor);
+bool ResolveCollapsedSelectionAnchor(_In_ ITfContext *context, TfEditCookie editCookie, _Out_ POINT *anchor,
+                                     _Out_opt_ HWND *contextRootWindow = nullptr);
 
 class CTfTextLayoutSink : public ITfTextLayoutSink
 {

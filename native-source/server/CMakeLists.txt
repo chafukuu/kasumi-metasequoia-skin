@@ -307,6 +307,7 @@ set(SRC_FILES
     "./src/utils/window_utils.cpp"
     "./src/utils/window_utils.h"
     "./src/window/candidate_presenter.cpp"
+    "./src/window/livesd_host.cpp"
     "./src/window/candidate_presenter.h"
     "./src/window/candidate_skin_layers.cpp"
     "./src/window/candidate_skin_layers.h"
