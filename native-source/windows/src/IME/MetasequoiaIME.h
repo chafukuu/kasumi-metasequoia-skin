@@ -4,6 +4,7 @@
 #include "MetasequoiaIMEBaseStructure.h"
 #include "Ipc.h"
 #include "DeferredKeyFailurePolicy.h"
+#include "LiveSDKeyObservationGuard.h"
 #include "char_classify.h"
 #include <atomic>
 #include <array>
@@ -12,6 +13,7 @@
 #include <deque>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -436,7 +438,7 @@ class CMetasequoiaIME : public ITfTextInputProcessorEx,
     bool _IsFocusSessionCurrent(uint64_t focusToken, _In_opt_ ITfContext *expectedContext = nullptr) const;
     // Passive read-session completion; never edits text or owns a key.
     void _CompleteLiveSDActivity(_In_ ITfContext *context, uint64_t focusToken, uint64_t focusGeneration,
-                                 uint64_t serial, unsigned pulses, unsigned enterActions,
+                                 uint64_t serial, unsigned pulses, unsigned enterActions, bool focusRequested,
                                  const std::array<std::uint32_t, 32> &intervals, bool resolved, POINT caret,
                                  HWND contextRootWindow);
     uint64_t _CaptureCompositionEpoch() const;
@@ -761,10 +763,14 @@ class CMetasequoiaIME : public ITfTextInputProcessorEx,
 
     BOOL _InitKeyEventSink();
     void _UninitKeyEventSink();
-    void _ObserveLiveSDKey(_In_ ITfContext *context, WPARAM key, LPARAM keyData);
-    void _QueueLiveSDActivity(bool typingPulse = false, DWORD typingMessageTime = 0, bool enterAction = false);
+    void _ObserveLiveSDKey(_In_ ITfContext *context, WPARAM key, LPARAM keyData, bool actualKeyDown = false,
+                           std::optional<LONG> observedMessageTime = std::nullopt);
+    void _ObserveLiveSDTestResult(_In_ ITfContext *context, WPARAM key, LPARAM keyData, bool eaten, LONG messageTime);
+    void _QueueLiveSDActivity(bool typingPulse = false, DWORD typingMessageTime = 0, bool enterAction = false,
+                              bool pinPosition = false, bool requestFocus = true);
     void _RunLiveSDActivity();
     void _CancelLiveSDActivity(bool sendBlur, bool keepPulses = false);
+    void _OnLiveSDThreadFocusLost();
 
     BOOL _InitActiveLanguageProfileNotifySink();
     void _UninitActiveLanguageProfileNotifySink();
@@ -1016,13 +1022,13 @@ class CMetasequoiaIME : public ITfTextInputProcessorEx,
     bool _liveSDReadPending = false;
     unsigned _liveSDPulses = 0;
     unsigned _liveSDEnterActions = 0;
+    unsigned _liveSDPinRequests = 0;
+    bool _liveSDFocusRequested = false;
     std::array<std::uint32_t, 32> _liveSDPulseIntervals{};
     bool _liveSDHasTypingMessageTime = false;
     DWORD _liveSDLastTypingMessageTime = 0;
     unsigned _liveSDCaretRetries = 0;
-    UINT _liveSDLastKey = 0;
-    LONG _liveSDLastKeyTime = 0;
-    LPARAM _liveSDLastKeyData = 0;
+    LiveSDKeyObservationGuard _liveSDKeyObservation;
 
     // Bare Shift/Ctrl toggle arming (Weasel-style: release within timeout).
     bool _shiftHotkeyArmed;

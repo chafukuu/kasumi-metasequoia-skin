@@ -55,8 +55,12 @@ class CMetasequoiaIME
     UINT _ipcConsecutiveFailures = 4;
     int snapshots = 0;
     int drains = 0;
+    int liveSDFocusRequests = 0;
+    int snapshotsAtLiveSD = 0;
+    int liveSDRequestsAtDrain = 0;
     bool fallbackAtSnapshot = true;
     bool fallbackAtDrain = true;
+    bool fallbackAtLiveSD = true;
 
     bool _IsComposing()
     {
@@ -74,9 +78,17 @@ class CMetasequoiaIME
 
     void _TryLeaveServerUnavailableFallback();
 
+    void _QueueLiveSDActivity()
+    {
+        ++liveSDFocusRequests;
+        snapshotsAtLiveSD = snapshots;
+        fallbackAtLiveSD = _serverUnavailableFallbackActive;
+    }
+
     void _ScheduleDeferredKeyDownDrain()
     {
         ++drains;
+        liveSDRequestsAtDrain = liveSDFocusRequests;
         fallbackAtDrain = _serverUnavailableFallbackActive;
     }
 };
@@ -107,12 +119,14 @@ int main()
     CMetasequoiaIME delayed;
     RunReconnectMessage(delayed);
     CHECK(delayed._serverUnavailableFallbackActive);
-    CHECK(delayed.snapshots == 0 && delayed.drains == 0 && armedTimers == 1);
+    CHECK(delayed.snapshots == 0 && delayed.drains == 0 && delayed.liveSDFocusRequests == 0 && armedTimers == 1);
     transportReady = true;
     RunReconnectTimer(delayed);
     CHECK(!delayed._serverUnavailableFallbackActive);
     CHECK(!delayed.fallbackAtSnapshot && !delayed.fallbackAtDrain);
     CHECK(delayed.snapshots == 1 && delayed.drains == 1 && stoppedTimers == 1);
+    CHECK(delayed.liveSDFocusRequests == 1 && !delayed.fallbackAtLiveSD);
+    CHECK(delayed.snapshotsAtLiveSD == 1 && delayed.liveSDRequestsAtDrain == 1);
     CHECK(delayed._ipcReconnectDelayMs == CONNECT_NAMEDPIPE_RETRY_INTERVAL_MS);
     CHECK(delayed._ipcConsecutiveFailures == 0);
 
@@ -121,12 +135,15 @@ int main()
     RunReconnectMessage(immediate);
     CHECK(!immediate._serverUnavailableFallbackActive);
     CHECK(!immediate.fallbackAtSnapshot && !immediate.fallbackAtDrain);
+    CHECK(immediate.liveSDFocusRequests == 1 && !immediate.fallbackAtLiveSD);
+    CHECK(immediate.snapshotsAtLiveSD == 1 && immediate.liveSDRequestsAtDrain == 1);
 
     // An offline composition owns its raw text until it has been finalized.
     CMetasequoiaIME composing;
     composing.composing = true;
     RunReconnectTimer(composing);
     CHECK(composing._serverUnavailableFallbackActive && composing.fallbackAtDrain);
+    CHECK(composing.liveSDFocusRequests == 1 && composing.fallbackAtLiveSD);
     composing.composing = false;
     composing._TryLeaveServerUnavailableFallback();
     CHECK(!composing._serverUnavailableFallbackActive);
@@ -151,25 +168,26 @@ int main()
     const int attemptsBeforeReset = handshakeAttempts;
     RunReconnectTimer(resetting);
     CHECK(resetting._serverUnavailableFallbackActive);
-    CHECK(resetting.snapshots == 0 && resetting.drains == 0);
+    CHECK(resetting.snapshots == 0 && resetting.drains == 0 && resetting.liveSDFocusRequests == 0);
     CHECK(handshakeAttempts == attemptsBeforeReset);
     resetting.releaseReset = true;
     RunReconnectTimer(resetting);
     CHECK(!resetting._serverUnavailableFallbackActive && !resetting.fallbackAtDrain);
+    CHECK(resetting.liveSDFocusRequests == 1 && !resetting.fallbackAtLiveSD);
 
     // A failed handshake, or focus that moved away, cannot restore Server input.
     transportReady = false;
     CMetasequoiaIME unavailable;
     RunReconnectTimer(unavailable);
     CHECK(unavailable._serverUnavailableFallbackActive);
-    CHECK(unavailable.snapshots == 0 && unavailable.drains == 0);
+    CHECK(unavailable.snapshots == 0 && unavailable.drains == 0 && unavailable.liveSDFocusRequests == 0);
     transportReady = true;
     Global::g_connected = false;
     CMetasequoiaIME unfocused;
     const int attemptsBeforeFocusLoss = handshakeAttempts;
     RunReconnectTimer(unfocused);
     CHECK(unfocused._serverUnavailableFallbackActive);
-    CHECK(unfocused.snapshots == 0 && unfocused.drains == 0);
+    CHECK(unfocused.snapshots == 0 && unfocused.drains == 0 && unfocused.liveSDFocusRequests == 0);
     CHECK(handshakeAttempts == attemptsBeforeFocusLoss);
 
     std::cout << "Reconnect recovery and offline-composition guards passed\n";

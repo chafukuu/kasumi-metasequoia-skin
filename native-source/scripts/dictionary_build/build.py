@@ -12,7 +12,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import english_db, inputs, japanese_model, others_db, pinyin_db, symbols_db, textutil
+from . import english_db, inputs, japanese_model, math_symbols, others_db, pinyin_db, symbols_db, textutil
 
 ROOT = Path(__file__).resolve().parents[2]
 DICT_ROOT = ROOT / "MetasequoiaImeDict"
@@ -165,7 +165,9 @@ def build_others(source: inputs.Inputs, path: Path, stage: Stages) -> None:
             catalog = symbols_db.catalog_rows(pinyin, groups, codex, excluded)
             codes = symbols_db.code_rows(groups, readings, codex, excluded)
             symbols_db.build(connection, catalog, codes)
-            return (f"{len(catalog)} panel symbols, {len(codes)} code rows from {len(groups)} groups, "
+            extra_codes, extra_items = math_symbols.apply(connection, excluded)
+            return (f"{len(catalog) + extra_items} panel symbols, {len(codes) + extra_codes} code rows including math, "
+                    f"{len(groups)} source groups, "
                     f"{len(readings)} pinyin readings and {len(codex)} codex names, "
                     f"{len(excluded)} unrenderable left out")
 
@@ -261,10 +263,11 @@ def write_manifests(directory: Path, commit: str, dirty: bool, msime_commit: str
 
 
 def builder_digest() -> str:
-    """构建器自身（本目录的 .py 与 inputs.lock.json，加上入口脚本）的摘要：构建规则变了，同一份源数据也要重建。"""
+    """构建脚本、锁文件或本地数学词表变化时，同一份外部源数据也要重建。"""
     digest = hashlib.sha256()
     here = Path(__file__).resolve().parent
-    for path in sorted([*here.glob("*.py"), here / "inputs.lock.json", ROOT / "scripts" / "build-dictionary.py"]):
+    sources = [*here.glob("*.py"), here / "inputs.lock.json", math_symbols.SOURCE, ROOT / "scripts" / "build-dictionary.py"]
+    for path in sorted(sources):
         digest.update(path.name.encode("utf-8") + b"\0" + path.read_bytes().replace(b"\r\n", b"\n") + b"\0")
     return digest.hexdigest()
 

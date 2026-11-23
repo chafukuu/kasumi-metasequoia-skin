@@ -175,11 +175,70 @@ TEST_CASE(ipc_livesd_enter_action_is_an_appended_optional_activity_kind)
     REQUIRE_EQ(FanyImeLiveSDActivity::TypingPulse, 1u);
     REQUIRE_EQ(FanyImeLiveSDActivity::Blur, 2u);
     REQUIRE_EQ(FanyImeLiveSDActivity::EnterAction, 3u);
+    REQUIRE_EQ(FanyImeLiveSDActivity::PinPosition, 4u);
     REQUIRE(FanyImeLiveSDActivity::IsKnownKind(FanyImeLiveSDActivity::EnterAction));
-    REQUIRE(!FanyImeLiveSDActivity::IsKnownKind(FanyImeLiveSDActivity::EnterAction + 1u));
+    REQUIRE(!FanyImeLiveSDActivity::IsKnownKind(FanyImeLiveSDActivity::ComboReset + 1u));
     REQUIRE(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::EnterAction));
+    REQUIRE(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::PinPosition));
     REQUIRE(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Focus));
     REQUIRE(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Blur));
+}
+
+TEST_CASE(ipc_livesd_pin_requires_a_separately_negotiated_capability)
+{
+    REQUIRE_EQ(FanyImeProtocol::LiveSDPinPosition, 1u << 11);
+    REQUIRE((FanyImeProtocol::LiveSDPinPosition & FanyImeProtocol::RequiredCapabilities) == 0u);
+    const auto oldCapabilities =
+        FanyImeProtocol::Capabilities | FanyImeProtocol::LiveSDActivity | FanyImeProtocol::LiveSDTypingCadence;
+    const auto newCapabilities = oldCapabilities | FanyImeProtocol::LiveSDPinPosition;
+    const auto oldHello = FanyImeProtocol::Hello(7, 123, oldCapabilities);
+    const auto newHello = FanyImeProtocol::Hello(7, 124, newCapabilities);
+    const auto newClientOldServer = FanyImeProtocol::Negotiate(newHello, oldCapabilities);
+    const auto oldClientNewServer = FanyImeProtocol::Negotiate(oldHello, newCapabilities);
+    const auto newClientNewServer = FanyImeProtocol::Negotiate(newHello, newCapabilities);
+    REQUIRE(newClientOldServer.accepted && oldClientNewServer.accepted && newClientNewServer.accepted);
+    for (std::uint32_t kind = FanyImeLiveSDActivity::Focus; kind <= FanyImeLiveSDActivity::EnterAction; ++kind)
+    {
+        REQUIRE(FanyImeProtocol::AllowsLiveSDActivityKind(newClientOldServer.capabilities, kind));
+        REQUIRE(FanyImeProtocol::AllowsLiveSDActivityKind(oldClientNewServer.capabilities, kind));
+    }
+    REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(newClientOldServer.capabilities,
+                                                       FanyImeLiveSDActivity::PinPosition));
+    REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(oldClientNewServer.capabilities,
+                                                       FanyImeLiveSDActivity::PinPosition));
+    REQUIRE(
+        FanyImeProtocol::AllowsLiveSDActivityKind(newClientNewServer.capabilities, FanyImeLiveSDActivity::PinPosition));
+    REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(FanyImeProtocol::LiveSDPinPosition,
+                                                       FanyImeLiveSDActivity::PinPosition));
+    REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(newCapabilities, FanyImeLiveSDActivity::PinPosition + 1u));
+}
+
+TEST_CASE(ipc_livesd_combo_requires_a_separately_negotiated_capability)
+{
+    REQUIRE_EQ(FanyImeProtocol::LiveSDCombo, 1u << 12);
+    REQUIRE_EQ(FanyImeLiveSDActivity::ComboTyping, 5u);
+    REQUIRE_EQ(FanyImeLiveSDActivity::ComboReset, 6u);
+    REQUIRE((FanyImeProtocol::LiveSDCombo & FanyImeProtocol::RequiredCapabilities) == 0u);
+    const auto oldCapabilities = FanyImeProtocol::Capabilities | FanyImeProtocol::LiveSDActivity |
+                                 FanyImeProtocol::LiveSDTypingCadence | FanyImeProtocol::LiveSDPinPosition;
+    const auto newCapabilities = oldCapabilities | FanyImeProtocol::LiveSDCombo;
+    const auto oldHello = FanyImeProtocol::Hello(7, 125, oldCapabilities);
+    const auto newHello = FanyImeProtocol::Hello(7, 126, newCapabilities);
+    const auto newOld = FanyImeProtocol::Negotiate(newHello, oldCapabilities);
+    const auto oldNew = FanyImeProtocol::Negotiate(oldHello, newCapabilities);
+    const auto newNew = FanyImeProtocol::Negotiate(newHello, newCapabilities);
+    REQUIRE(newOld.accepted && oldNew.accepted && newNew.accepted);
+    for (const auto kind : {FanyImeLiveSDActivity::ComboTyping, FanyImeLiveSDActivity::ComboReset})
+    {
+        REQUIRE(FanyImeLiveSDActivity::IsKnownKind(kind));
+        REQUIRE(FanyImeLiveSDActivity::AllowsMissingCaret(kind));
+        REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(newOld.capabilities, kind));
+        REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(oldNew.capabilities, kind));
+        REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(FanyImeProtocol::LiveSDCombo, kind));
+        REQUIRE(FanyImeProtocol::AllowsLiveSDActivityKind(newNew.capabilities, kind));
+    }
+    REQUIRE(!FanyImeProtocol::AllowsLiveSDActivityKind(newCapabilities, 7u));
+    REQUIRE_EQ(sizeof(FanyImeNamedpipeData), 304u);
 }
 
 TEST_CASE(ipc_uiless_flag_is_outside_key_modifier_mask)

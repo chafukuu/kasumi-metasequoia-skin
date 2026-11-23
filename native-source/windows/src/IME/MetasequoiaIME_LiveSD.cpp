@@ -11,6 +11,7 @@ namespace
 constexpr UINT ActivityDelayMs = 16;
 constexpr unsigned MaxPendingPulses = 32;
 constexpr unsigned MaxPendingEnterActions = 32;
+constexpr unsigned MaxPendingPinRequests = 32;
 
 bool ResolveNativeCaretAnchor(POINT *anchor, HWND *contextRootWindow)
 {
@@ -41,10 +42,10 @@ class CLiveSDCaretEditSession : public CEditSessionBase
 {
   public:
     CLiveSDCaretEditSession(CMetasequoiaIME *service, ITfContext *context, uint64_t focusToken, uint64_t generation,
-                            uint64_t serial, unsigned pulses, unsigned enterActions,
+                            uint64_t serial, unsigned pulses, unsigned enterActions, bool focusRequested,
                             const std::array<std::uint32_t, MaxPendingPulses> &intervals)
         : CEditSessionBase(service, context), focusToken_(focusToken), generation_(generation), serial_(serial),
-          pulses_(pulses), enterActions_(enterActions), intervals_(intervals)
+          pulses_(pulses), enterActions_(enterActions), focusRequested_(focusRequested), intervals_(intervals)
     {
     }
 
@@ -61,7 +62,7 @@ class CLiveSDCaretEditSession : public CEditSessionBase
         if (!resolved && current)
             resolved = ResolveNativeCaretAnchor(&caret, &contextRootWindow);
         _pTextService->_CompleteLiveSDActivity(_pContext, focusToken_, generation_, serial_, pulses_, enterActions_,
-                                               intervals_, resolved, caret, contextRootWindow);
+                                               focusRequested_, intervals_, resolved, caret, contextRootWindow);
         return S_OK;
     }
 
@@ -71,6 +72,7 @@ class CLiveSDCaretEditSession : public CEditSessionBase
     uint64_t serial_;
     unsigned pulses_;
     unsigned enterActions_;
+    bool focusRequested_;
     std::array<std::uint32_t, MaxPendingPulses> intervals_{};
 };
 
@@ -82,7 +84,18 @@ bool IsTypingKey(UINT key)
 }
 } // namespace
 
-void CMetasequoiaIME::_ObserveLiveSDKey(ITfContext *context, WPARAM key, LPARAM keyData)
+void CMetasequoiaIME::_ObserveLiveSDTestResult(ITfContext *context, WPARAM key, LPARAM keyData, bool eaten,
+                                               LONG messageTime)
+{
+    // An owned key will reach OnKeyDown. A preflight query may run repeatedly
+    // with different message metadata and must not count before that action.
+    // Uneaten keys have no actual callback, so observe their completed test.
+    if (!eaten)
+        _ObserveLiveSDKey(context, key, keyData, false, messageTime);
+}
+
+void CMetasequoiaIME::_ObserveLiveSDKey(ITfContext *context, WPARAM key, LPARAM keyData, bool actualKeyDown,
+                                        std::optional<LONG> observedMessageTime)
 {
     if (!context || !SupportsLiveSDActivity() || !IsNamedpipeFocusStateOwner(this) ||
         IsSelfGeneratedSendInputExtraInfo(static_cast<ULONG_PTR>(GetMessageExtraInfo())))
@@ -92,22 +105,41 @@ void CMetasequoiaIME::_ObserveLiveSDKey(ITfContext *context, WPARAM key, LPARAM 
         return;
     const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     const bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-    if (ctrl || alt || (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0 ||
-        _IsKeyboardDisabled())
+    const bool win = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+    if (alt || win || _IsKeyboardDisabled())
         return;
     const UINT virtualKey = static_cast<UINT>(key);
-    const LONG messageTime = GetMessageTime();
-    // A TestKeyDown query may repeat; the real key is counted only here, never
-    // again by OnKeyDown or a replay of the IME-owned deferred queue.
-    if (_liveSDLastKey == virtualKey && _liveSDLastKeyTime == messageTime && _liveSDLastKeyData == keyData)
+    const LONG messageTime = observedMessageTime ? *observedMessageTime : GetMessageTime();
+    // Test and actual callbacks are paired by phase, not by their incidental
+    // message time/lParam. Motion cancellation must not erase this pairing.
+    if (!_liveSDKeyObservation.Observe(virtualKey, static_cast<std::uint32_t>(messageTime),
+                                       static_cast<std::uint64_t>(keyData), actualKeyDown))
         return;
-    _liveSDLastKey = virtualKey;
-    _liveSDLastKeyTime = messageTime;
-    _liveSDLastKeyData = keyData;
+    // Send in observed key order, before the caret-read queue groups motion
+    // pulses and Enter actions. In particular, a -> Enter -> b must remain
+    // increment -> reset -> increment even within one 16 ms motion batch.
+    // No text is transmitted and older Servers never receive these new kinds.
+    if (SupportsLiveSDCombo())
+    {
+        if (virtualKey == VK_BACK || virtualKey == VK_RETURN)
+            SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::ComboReset,
+                                          POINT{0, FanyImeLiveSDActivity::InvalidCaretY}, nullptr);
+        else if (!ctrl && IsTypingKey(virtualKey))
+            SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::ComboTyping,
+                                          POINT{0, FanyImeLiveSDActivity::InvalidCaretY}, nullptr);
+    }
+    if (ctrl)
+    {
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        if (virtualKey == 'Z' && !shift && (keyData & (static_cast<LPARAM>(1) << 30)) == 0)
+            _QueueLiveSDActivity(false, 0, false, true, false);
+        return;
+    }
     _QueueLiveSDActivity(IsTypingKey(virtualKey), static_cast<DWORD>(messageTime), virtualKey == VK_RETURN);
 }
 
-void CMetasequoiaIME::_QueueLiveSDActivity(bool typingPulse, DWORD typingMessageTime, bool enterAction)
+void CMetasequoiaIME::_QueueLiveSDActivity(bool typingPulse, DWORD typingMessageTime, bool enterAction,
+                                           bool pinPosition, bool requestFocus)
 {
     if (!_msgWndHandle || !IsNamedpipeFocusStateOwner(this) || !Global::g_connected || !SupportsLiveSDActivity() ||
         Global::IsUiLessMode())
@@ -127,7 +159,10 @@ void CMetasequoiaIME::_QueueLiveSDActivity(bool typingPulse, DWORD typingMessage
     }
     if (enterAction)
         _liveSDEnterActions = (std::min)(_liveSDEnterActions + 1U, MaxPendingEnterActions);
-    if (!_liveSDTimerArmed && !_liveSDReadPending)
+    if (pinPosition)
+        _liveSDPinRequests = (std::min)(_liveSDPinRequests + 1U, MaxPendingPinRequests);
+    _liveSDFocusRequested = _liveSDFocusRequested || requestFocus;
+    if (!_liveSDTimerArmed && (!_liveSDReadPending || pinPosition))
     {
         // WM_TIMER runs after the host's queued key and paint messages, so
         // ordinary English gets the caret after the application inserted it.
@@ -139,23 +174,47 @@ void CMetasequoiaIME::_RunLiveSDActivity()
 {
     KillTimer(_msgWndHandle, TIMER_LIVESD_ACTIVITY);
     _liveSDTimerArmed = false;
-    if (_liveSDReadPending || !_pThreadMgr || !SupportsLiveSDActivity() || !IsNamedpipeFocusStateOwner(this))
+    if (!_pThreadMgr || !SupportsLiveSDActivity() || !IsNamedpipeFocusStateOwner(this))
         return;
+    const uint64_t activitySerial = _liveSDSerial;
+    const uint64_t focusGeneration = _deferredKeyFocusGeneration;
+    const uint64_t focusToken = _CaptureFocusSessionToken();
     BOOL hasThreadFocus = FALSE;
-    if (FAILED(_pThreadMgr->IsThreadFocus(&hasThreadFocus)) || !hasThreadFocus || _IsKeyboardDisabled())
+    const HRESULT threadFocusResult = _pThreadMgr->IsThreadFocus(&hasThreadFocus);
+    const bool keyboardDisabled = _IsKeyboardDisabled();
+    // COM focus/compartment queries can re-enter document-focus callbacks.
+    // This timer must not consume requests queued by the replacement session.
+    if (activitySerial != _liveSDSerial || focusGeneration != _deferredKeyFocusGeneration ||
+        focusToken != _CaptureFocusSessionToken() || !IsNamedpipeFocusStateOwner(this))
+        return;
+    if (FAILED(threadFocusResult) || !hasThreadFocus || keyboardDisabled)
     {
         _CancelLiveSDActivity(true);
         return;
     }
-    const uint64_t focusToken = _CaptureFocusSessionToken();
     if (!_IsFocusSessionCurrent(focusToken))
     {
         _liveSDPulses = 0;
         _liveSDEnterActions = 0;
+        _liveSDPinRequests = 0;
+        _liveSDFocusRequested = false;
         _liveSDPulseIntervals.fill(0);
         _liveSDHasTypingMessageTime = false;
         return;
     }
+    const unsigned pinRequests = _liveSDPinRequests;
+    _liveSDPinRequests = 0;
+    // Position pinning does not depend on the host granting a caret read lock.
+    // A previous asynchronous edit session may still be waiting for that lock.
+    for (unsigned i = 0; i < pinRequests; ++i)
+        SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::PinPosition,
+                                      POINT{0, FanyImeLiveSDActivity::InvalidCaretY}, nullptr);
+    if (_liveSDReadPending)
+        return;
+    const bool focusRequested = _liveSDFocusRequested;
+    _liveSDFocusRequested = false;
+    if (!focusRequested && !_liveSDPulses && !_liveSDEnterActions)
+        return;
     ITfDocumentMgr *document = nullptr;
     ITfContext *context = nullptr;
     if (SUCCEEDED(_pThreadMgr->GetFocus(&document)) && document)
@@ -180,7 +239,7 @@ void CMetasequoiaIME::_RunLiveSDActivity()
     const auto intervals = _liveSDPulseIntervals;
     const uint64_t serial = _liveSDSerial;
     auto *session = new (std::nothrow) CLiveSDCaretEditSession(this, context, focusToken, _deferredKeyFocusGeneration,
-                                                               serial, pulses, enterActions, intervals);
+                                                               serial, pulses, enterActions, focusRequested, intervals);
     if (session)
     {
         _liveSDReadPending = true;
@@ -191,7 +250,8 @@ void CMetasequoiaIME::_RunLiveSDActivity()
         if (serial == _liveSDSerial && _liveSDReadPending && (requested != S_OK || sessionResult != TF_S_ASYNC))
         {
             _CompleteLiveSDActivity(context, focusToken, _deferredKeyFocusGeneration, serial, pulses, enterActions,
-                                    intervals, false, POINT{0, FanyImeLiveSDActivity::InvalidCaretY}, nullptr);
+                                    focusRequested, intervals, false, POINT{0, FanyImeLiveSDActivity::InvalidCaretY},
+                                    nullptr);
         }
     }
     context->Release();
@@ -199,6 +259,7 @@ void CMetasequoiaIME::_RunLiveSDActivity()
 
 void CMetasequoiaIME::_CompleteLiveSDActivity(ITfContext *context, uint64_t focusToken, uint64_t focusGeneration,
                                               uint64_t serial, unsigned pulses, unsigned enterActions,
+                                              bool focusRequested,
                                               const std::array<std::uint32_t, MaxPendingPulses> &intervals,
                                               bool resolved, POINT caret, HWND contextRootWindow)
 {
@@ -212,6 +273,8 @@ void CMetasequoiaIME::_CompleteLiveSDActivity(ITfContext *context, uint64_t focu
     {
         _liveSDPulses = 0;
         _liveSDEnterActions = 0;
+        _liveSDPinRequests = 0;
+        _liveSDFocusRequested = false;
         _liveSDPulseIntervals.fill(0);
         _liveSDHasTypingMessageTime = false;
         return;
@@ -228,7 +291,8 @@ void CMetasequoiaIME::_CompleteLiveSDActivity(ITfContext *context, uint64_t focu
         _liveSDPulses -= consumed;
         const unsigned consumedEnterActions = (std::min)(_liveSDEnterActions, enterActions);
         _liveSDEnterActions -= consumedEnterActions;
-        SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::Focus, caret, contextRootWindow);
+        if (focusRequested)
+            SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::Focus, caret, contextRootWindow);
         for (unsigned i = 0; i < pulses; ++i)
             SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::TypingPulse, caret, contextRootWindow, intervals[i]);
         for (unsigned i = 0; i < consumedEnterActions; ++i)
@@ -252,16 +316,17 @@ void CMetasequoiaIME::_CompleteLiveSDActivity(ITfContext *context, uint64_t focu
         for (unsigned i = 0; i < consumedEnterActions; ++i)
             SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::EnterAction,
                                           POINT{0, FanyImeLiveSDActivity::InvalidCaretY}, nullptr);
-
-        if (_liveSDCaretRetries++ < 2)
+        if ((focusRequested || pulses || enterActions) && _liveSDCaretRetries++ < 2)
         {
             // Transient TS_E_NOLAYOUT is normal in Chromium; never substitute a
             // fabricated/default position or a point from a previous context.
             _QueueLiveSDActivity();
         }
     }
-    if (_liveSDPulses || _liveSDEnterActions)
+    if (_liveSDPulses || _liveSDEnterActions || _liveSDFocusRequested)
         _QueueLiveSDActivity();
+    else if (_liveSDPinRequests && !_liveSDTimerArmed)
+        _liveSDTimerArmed = SetTimer(_msgWndHandle, TIMER_LIVESD_ACTIVITY, ActivityDelayMs, nullptr) != 0;
 }
 
 void CMetasequoiaIME::_CancelLiveSDActivity(bool sendBlur, bool keepPulses)
@@ -277,14 +342,24 @@ void CMetasequoiaIME::_CancelLiveSDActivity(bool sendBlur, bool keepPulses)
     if (!keepPulses)
         _liveSDEnterActions = 0;
     if (!keepPulses)
+        _liveSDPinRequests = 0;
+    if (!keepPulses)
+        _liveSDFocusRequested = false;
+    if (!keepPulses)
     {
         _liveSDPulseIntervals.fill(0);
         _liveSDHasTypingMessageTime = false;
     }
     _liveSDCaretRetries = 0;
-    if (!keepPulses)
-        _liveSDLastKey = 0;
     if (sendBlur && IsNamedpipeFocusStateOwner(this))
         SendLiveSDActivityToUIProcess(FanyImeLiveSDActivity::Blur, POINT{0, FanyImeLiveSDActivity::InvalidCaretY},
                                       nullptr);
+}
+
+void CMetasequoiaIME::_OnLiveSDThreadFocusLost()
+{
+    // Thread focus can move to auxiliary UI without ending the text-field
+    // session. Clear queued actions, but leave visibility to the authoritative
+    // document-session and Server foreground-owner paths.
+    _CancelLiveSDActivity(false);
 }

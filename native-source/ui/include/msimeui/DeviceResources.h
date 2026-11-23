@@ -134,6 +134,9 @@ class DeviceResources
     // to the moment that frame changes. Still images take the GetBitmapFromFile path. Sizes
     // are in DIPs at 96 DPI, one DIP per image pixel, the same as GetBitmapFromFile.
     ID2D1Bitmap *GetImageFrame(const std::wstring &filePath, D2D1_SIZE_F *size = nullptr);
+    // Optional continuous crossfade between adjacent decoded animation frames.
+    // Bitmaps remain owned by this DeviceResources and are valid for this frame.
+    ID2D1Bitmap *GetImageFrameBlend(const std::wstring &filePath, ID2D1Bitmap **next, float *mix);
     // Drops every decoded image, still and animated, so files changed on disk are read again.
     void ClearImageCaches();
     // Off: images are drawn still, as GetBitmapFromFile decodes them (the APNG default image,

@@ -946,6 +946,7 @@ ExitError:
 STDAPI CMetasequoiaIME::Deactivate()
 {
     _CancelLiveSDActivity(true);
+    _liveSDKeyObservation.Reset();
     _UninitBareShiftKeyboardHook();
     Global::HostUiLessMode = false;
     Global::CandidateUiLessMode = false;

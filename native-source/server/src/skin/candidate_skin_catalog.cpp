@@ -559,6 +559,58 @@ bool ReadBandArtwork(const toml::node *node, std::optional<BandArtwork> &out)
     return true;
 }
 
+bool ReadLiveSDCombo(const toml::node *node, std::optional<LiveSDCombo> &out)
+{
+    if (!node)
+    {
+        out.reset();
+        return true;
+    }
+    const auto *table = node->as_table();
+    if (!table)
+        return false;
+    std::optional<bool> enabled;
+    if (!ReadOptionalBool(*table, "enabled", enabled))
+        return false;
+    if (!enabled.value_or(true))
+    {
+        out.reset();
+        return true;
+    }
+    LiveSDCombo value;
+    const auto isPng = [](const std::string &path) {
+        if (!IsSafeRelativeResource(path))
+            return false;
+        auto extension = std::filesystem::u8path(path).extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return extension == ".png";
+    };
+    const auto *digits = table->get_as<toml::array>("digit_images");
+    if (!digits || digits->size() != value.digitImages.size() || !table->contains("label_image") ||
+        !ReadResource(*table, "label_image", value.labelImage) || !isPng(value.labelImage))
+        return false;
+    for (size_t i = 0; i < value.digitImages.size(); ++i)
+    {
+        const auto *path = digits->get_as<std::string>(i);
+        if (!path || !isPng(path->get()))
+            return false;
+        value.digitImages[i] = path->get();
+    }
+    const auto readRange = [table](const char *key, double minimum, double maximum, double &number) {
+        return ReadSignedNumber(*table, key, maximum, number) && number >= minimum && number <= maximum;
+    };
+    if (!readRange("digit_height_dip", 8.0, 128.0, value.digitHeightDip) ||
+        !readRange("slot_width_dip", 8.0, 128.0, value.slotWidthDip) ||
+        !readRange("label_height_dip", 4.0, 64.0, value.labelHeightDip) ||
+        !readRange("label_gap_dip", 0.0, 64.0, value.labelGapDip) ||
+        !ReadSignedNumber(*table, "offset_x_dip", 4096.0, value.offsetXDip) ||
+        !ReadSignedNumber(*table, "offset_y_dip", 4096.0, value.offsetYDip))
+        return false;
+    out = std::move(value);
+    return true;
+}
+
 bool ReadLiveSD(const toml::node *node, std::optional<LiveSD> &out)
 {
     if (!node)
@@ -602,6 +654,9 @@ bool ReadLiveSD(const toml::node *node, std::optional<LiveSD> &out)
         !readRange("height_dip", 46.0, 345.0, value.heightDip) ||
         !readRange("foot_y_dip", 60.0, value.stageHeightDip - 4.0, value.footYDip) ||
         value.stageWidthDip < value.widthDip + 24.0 || value.footYDip < value.heightDip + 20.0)
+        return false;
+    if (!readRange("right_boundary_inset_dip", 0.0, 4096.0, value.rightBoundaryInsetDip) ||
+        !ReadLiveSDCombo(table->get("combo"), value.combo))
         return false;
     out = std::move(value);
     return true;
@@ -1205,7 +1260,7 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
             if (!ReadLiveSD(window->get("livesd"), package.liveSD))
             {
                 SetError(error, "candidate_window.livesd requires four relative PNG images, finite stage/sprite "
-                                "sizes, and sufficient foot-anchor margins for jumping and swaying");
+                                "sizes, sufficient foot-anchor margins, and valid optional combo PNGs/DIP sizes");
                 return std::nullopt;
             }
             if (!ReadTypedStars(window->get("typed_stars"), package.typedStars))
@@ -1444,6 +1499,21 @@ std::optional<Package> Load(const std::filesystem::path &skinsRoot, const std::s
                 {
                     SetError(error, "candidate_window.livesd image must exist inside the skin directory");
                     return std::nullopt;
+                }
+            }
+            if (package.liveSD->combo)
+            {
+                const auto &combo = *package.liveSD->combo;
+                const bool valid = IsContainedRegularResource(directory, combo.labelImage) &&
+                                   std::all_of(combo.digitImages.begin(), combo.digitImages.end(),
+                                               [&directory](const std::string &path) {
+                                                   return IsContainedRegularResource(directory, path);
+                                               });
+                if (!valid)
+                {
+                    package.liveSD->combo.reset();
+                    package.notices.push_back("candidate_window.livesd.combo disabled: all ten digit images and "
+                                              "the label must exist inside the skin directory");
                 }
             }
         }

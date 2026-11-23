@@ -625,7 +625,7 @@ void MainPipeClientThread(HANDLE clientPipe, uint64_t handlerId)
         }
 
         case FanyImePipeEventType::LiveSDActivity: {
-            if (ClientNegotiatedLiveSDActivity(clientId))
+            if (ClientNegotiatedLiveSDActivity(clientId, pipeData.keycode))
             {
                 if (!ClientNegotiatedLiveSDTypingCadence(clientId))
                     pipeData.modifiers_down = 0;

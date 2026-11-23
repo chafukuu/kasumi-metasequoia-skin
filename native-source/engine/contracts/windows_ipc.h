@@ -132,7 +132,8 @@ constexpr std::uint32_t InputStateAction = 17;
 // TypingPulse may use {0, -100000} when the current focus session is valid but
 // the editor did not expose a caret; the Server must pulse only its existing
 // host and must not create or reposition one from that packet. EnterAction may
-// use the same sentinel when an existing host is already visible. Blur uses the
+// use the same sentinel when an existing host is already visible. PinPosition
+// also uses it and only toggles the existing English host's position. Blur uses the
 // same sentinel and always has a zero request_id.
 constexpr std::uint32_t LiveSDActivity = 18;
 constexpr bool IsRouteDeactivation(std::uint32_t event_type)
@@ -153,15 +154,24 @@ constexpr std::uint32_t Blur = 2;
 // A physical Enter press; it triggers the configured aerial action without
 // being counted as an ordinary typing pulse.
 constexpr std::uint32_t EnterAction = 3;
+// English-mode Ctrl+Z decoration command, requiring negotiated
+// LiveSDPinPosition capability. Older Servers must never receive this kind.
+// The host toggles a fixed position; it never edits text.
+constexpr std::uint32_t PinPosition = 4;
+// Ordered character-key counting is independent of asynchronous motion pulses.
+// Both kinds require the separately negotiated LiveSDCombo capability.
+constexpr std::uint32_t ComboTyping = 5;
+constexpr std::uint32_t ComboReset = 6;
 constexpr std::uint32_t MaximumTypingIntervalMs = 5000;
 constexpr int InvalidCaretY = -100000;
 constexpr bool AllowsMissingCaret(std::uint32_t kind)
 {
-    return kind == TypingPulse || kind == EnterAction;
+    return kind == TypingPulse || kind == EnterAction || kind == PinPosition || kind == ComboTyping ||
+           kind == ComboReset;
 }
 constexpr bool IsKnownKind(std::uint32_t kind)
 {
-    return kind <= EnterAction;
+    return kind <= ComboReset;
 }
 } // namespace FanyImeLiveSDActivity
 

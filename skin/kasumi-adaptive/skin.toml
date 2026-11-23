@@ -1,7 +1,7 @@
 schema_version = 2
 id = "kasumi-adaptive"
 name = "Kasumi Adaptive"
-version = "0.5.7"
+version = "0.5.6"
 author = "Kasumi"
 description = "Fixed artwork at 0.75 of v0.5.2; font 15, right portrait 90% and raised 10 DIP. Native item edges drive frets."
 base = "canvas"
@@ -157,6 +157,7 @@ rotation_min_deg = -24
 rotation_max_deg = 24
 spin_min_deg = -70
 spin_max_deg = 70
+
 [candidate_window.livesd]
 click_image = "assets/livesd/click-reaction.gif"
 click_duration_ms = 1600
@@ -172,6 +173,7 @@ height_dip = 185.472
 foot_y_dip = 233
 
 # Foreground pendant beneath the text row; no hit testing.
+right_boundary_inset_dip = 193.38
 [[candidate_window.decorations]]
 image = "assets/poppinparty-heads.png"
 anchor = "top-left"
@@ -180,3 +182,17 @@ offset_y_dip = 32.5
 width_dip = 179.2
 height_dip = 35.84
 z_index = 3
+
+[candidate_window.livesd.combo]
+enabled = true
+digit_images = ["assets/combo/digits/0.png", "assets/combo/digits/1.png", "assets/combo/digits/2.png", "assets/combo/digits/3.png", "assets/combo/digits/4.png", "assets/combo/digits/5.png", "assets/combo/digits/6.png", "assets/combo/digits/7.png", "assets/combo/digits/8.png", "assets/combo/digits/9.png"]
+label_image = "assets/combo/combo-label.png"
+# Upright counter centered above the companion; offsets are relative to its foot.
+digit_height_dip = 32
+slot_width_dip = 26
+label_height_dip = 12
+label_gap_dip = 2
+offset_x_dip = 0
+offset_y_dip = -200
+
+# Foreground pendant beneath the text row; no hit testing.

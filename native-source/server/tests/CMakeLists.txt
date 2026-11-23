@@ -92,6 +92,7 @@ set(TEST_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_colors.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_bases.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_images.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_combo.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_page_arrows.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_catalog_supports.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_candidate_skin_palette.cpp"

@@ -513,7 +513,8 @@ bool WritePipeHello(HANDLE hPipeHandle, UINT pipeRole)
                                        FanyImeProtocol::CompositionRestore | FanyImeProtocol::CaretStateIndicator |
                                        FanyImeProtocol::TrilingualCycle | FanyImeProtocol::InputStateShortcuts |
                                        FanyImeProtocol::TemporaryJapaneseLongVowel | FanyImeProtocol::LiveSDActivity |
-                                       FanyImeProtocol::LiveSDTypingCadence);
+                                       FanyImeProtocol::LiveSDTypingCadence | FanyImeProtocol::LiveSDPinPosition |
+                                       FanyImeProtocol::LiveSDCombo);
         BOOL ret = WriteFile(hPipeHandle, &hello, sizeof(hello), &bytesWritten, NULL);
         // Never authorize keys from merely writing a hello. An old Server
         // without negotiation times out into the existing raw-input fallback.
@@ -1004,11 +1005,17 @@ bool SupportsLiveSDActivity()
     return IsValidPipeHandle(hPipe) && (negotiatedServerCapabilities & FanyImeProtocol::LiveSDActivity) != 0;
 }
 
+bool SupportsLiveSDCombo()
+{
+    return SupportsLiveSDActivity() && (negotiatedServerCapabilities & FanyImeProtocol::LiveSDCombo) != 0;
+}
+
 bool SendLiveSDActivityToUIProcess(UINT kind, POINT caret, HWND contextRootWindow, UINT typingIntervalMs)
 {
-    if (!SupportsLiveSDActivity() || !FanyImeLiveSDActivity::IsKnownKind(kind) || !Global::g_connected ||
-        Global::IsUiLessMode() || IsLocalSessionResetPending() || !IsExpectedWorkerFocusAcknowledged() ||
-        (boundFocusResetPending && *boundFocusResetPending) || (boundActivationRequired && *boundActivationRequired))
+    if (!SupportsLiveSDActivity() || !FanyImeProtocol::AllowsLiveSDActivityKind(negotiatedServerCapabilities, kind) ||
+        !Global::g_connected || Global::IsUiLessMode() || IsLocalSessionResetPending() ||
+        !IsExpectedWorkerFocusAcknowledged() || (boundFocusResetPending && *boundFocusResetPending) ||
+        (boundActivationRequired && *boundActivationRequired))
     {
         return false;
     }

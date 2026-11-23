@@ -35,8 +35,21 @@ constexpr std::uint32_t TemporaryJapaneseLongVowel = 1u << 8;
 constexpr std::uint32_t LiveSDActivity = 1u << 9;
 // Optional LiveSD cadence field in the TypingPulse modifiers_down slot.
 constexpr std::uint32_t LiveSDTypingCadence = 1u << 10;
+// Optional LiveSD PinPosition kind. Older LiveSD Servers reject unknown kinds,
+// so clients must negotiate this bit before sending a position toggle.
+constexpr std::uint32_t LiveSDPinPosition = 1u << 11;
+// Optional ordered character-key/reset notifications, separate from motion.
+constexpr std::uint32_t LiveSDCombo = 1u << 12;
 constexpr std::uint32_t Capabilities = RequestIds | FocusEpochs | FramedVoice;
 constexpr std::uint32_t RequiredCapabilities = RequestIds | FocusEpochs;
+
+constexpr bool AllowsLiveSDActivityKind(std::uint32_t capabilities, std::uint32_t kind)
+{
+    return (capabilities & LiveSDActivity) != 0 && FanyImeLiveSDActivity::IsKnownKind(kind) &&
+           (kind != FanyImeLiveSDActivity::PinPosition || (capabilities & LiveSDPinPosition) != 0) &&
+           ((kind != FanyImeLiveSDActivity::ComboTyping && kind != FanyImeLiveSDActivity::ComboReset) ||
+            (capabilities & LiveSDCombo) != 0);
+}
 
 struct Negotiation
 {

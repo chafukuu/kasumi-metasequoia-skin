@@ -58,10 +58,10 @@ bool SupportsCompositionRestore();
 bool UsesHorizontalArrowSelection();
 bool SupportsCaretStateIndicator();
 bool SupportsLiveSDActivity();
+bool SupportsLiveSDCombo();
 // Best effort on the already activated PIPE_NOWAIT Main. Never connects, waits,
 // resets text state, or uses the shared key-packet staging buffer.
-bool SendLiveSDActivityToUIProcess(UINT kind, POINT caret, HWND contextRootWindow = nullptr,
-                                   UINT typingIntervalMs = 0);
+bool SendLiveSDActivityToUIProcess(UINT kind, POINT caret, HWND contextRootWindow = nullptr, UINT typingIntervalMs = 0);
 bool SupportsTrilingualCycle();
 bool SupportsInputStateShortcuts();
 bool FlushNamedpipeFocusSessionReset();

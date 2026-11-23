@@ -106,7 +106,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_IME_MODE            "Chinese/English input (Shift)"
+    IDS_IME_MODE            "Chinese/English input (Ctrl)"
     IDS_DOUBLE_SINGLE_BYTE  "Double/Single byte (Shift+Space)"
     IDS_PUNCTUATION         "Chinese/English punctuation (Ctrl+.)"
 END

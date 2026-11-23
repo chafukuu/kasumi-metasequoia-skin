@@ -1,5 +1,7 @@
 #include "../../engine/contracts/input_state_shortcuts.h"
 #include "../../engine/contracts/ipc_negotiation.h"
+#include "../src/Utils/SwitchLanguageHotkeys.h"
+#include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -83,7 +85,7 @@ int main()
 {
     using namespace FanyImeInputStateShortcuts;
     using namespace FanyImeKeyChord;
-    std::ifstream fixture(MSIME_SHORTCUT_FIXTURE_PATH);
+    std::ifstream fixture(std::filesystem::u8path(MSIME_SHORTCUT_FIXTURE_PATH));
     CHECK(std::string((std::istreambuf_iterator<char>(fixture)), {}) == Fixture());
     auto values = Defaults();
     auto resolved = Resolve(values);
@@ -124,6 +126,12 @@ int main()
     CHECK(Resolve(values).bindings[1].key == 'H');
     CHECK(TomlString(" 'Ctrl+Space' ") == "Ctrl+Space");
     CHECK(TomlString("true") == "!invalid");
+    const auto legacyModifiers = FanyImeSwitchLanguageHotkeys::ParseLegacyArray("[\"Ctrl\", \"Shift\"]");
+    CHECK(legacyModifiers.ctrl && legacyModifiers.shift && !legacyModifiers.ctrlAltSpace);
+    const auto legacyCtrlSpace = FanyImeSwitchLanguageHotkeys::ParseLegacyArray("[\"Ctrl+Space\"]");
+    CHECK(!legacyCtrlSpace.ctrl && !legacyCtrlSpace.shift && legacyCtrlSpace.ctrlAltSpace);
+    const auto legacyShift = FanyImeSwitchLanguageHotkeys::ParseLegacyArray("['Shift']");
+    CHECK(!legacyShift.ctrl && legacyShift.shift && !legacyShift.ctrlAltSpace);
     CHECK(Validate(2, "Ctrl+KeyC", values).empty());
     auto hello = FanyImeProtocol::Hello(1, 2, FanyImeProtocol::Capabilities | FanyImeProtocol::InputStateShortcuts);
     CHECK(!(FanyImeProtocol::Negotiate(hello).capabilities & FanyImeProtocol::InputStateShortcuts));

@@ -885,7 +885,24 @@ STDAPI CMetasequoiaIME::OnTestKeyDown(ITfContext *pContext, WPARAM wParam, LPARA
     }
     PerfTimer onTestKeyDownTimer;
     Global::UpdateModifiers(wParam, lParam);
-    _ObserveLiveSDKey(pContext, wParam, lParam);
+    // Classify before observing: Chinese/IME-owned keys count on OnKeyDown,
+    // while passthrough keys have no actual callback and count on test return.
+    // The scope guard covers every early classification return without heap
+    // allocation or a second keyboard/text dispatch.
+    *pIsEaten = TRUE;
+    struct ObserveLiveSDTestOnReturn
+    {
+        CMetasequoiaIME *service;
+        ITfContext *context;
+        WPARAM key;
+        LPARAM data;
+        BOOL *eaten;
+        LONG messageTime;
+        ~ObserveLiveSDTestOnReturn()
+        {
+            service->_ObserveLiveSDTestResult(context, key, data, *eaten != FALSE, messageTime);
+        }
+    } observeTest{this, pContext, wParam, lParam, pIsEaten, static_cast<LONG>(testKeyMessageTime)};
     _TrackModifierHotkeyArming(wParam, lParam, false);
     if (IsShiftVk(LOWORD(wParam)))
     {
@@ -1043,7 +1060,7 @@ STDAPI CMetasequoiaIME::OnKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM lP
         _QueueCapsLockEdge(true);
     }
     PerfTimer onKeyDownTimer;
-    _ObserveLiveSDKey(pContext, wParam, lParam);
+    _ObserveLiveSDKey(pContext, wParam, lParam, true);
     const uint64_t focusGeneration = _deferredKeyFocusGeneration;
     (void)_DispatchKeyDown(pContext, wParam, lParam, pIsEaten, nullptr, nullptr, nullptr, true, focusGeneration);
     // Some hosts offer the actual callback without a preceding test.
@@ -1598,6 +1615,7 @@ STDAPI CMetasequoiaIME::OnTestKeyUp(ITfContext *pContext, WPARAM wParam, LPARAM 
         return S_OK;
     }
 
+    _liveSDKeyObservation.KeyUp(static_cast<UINT>(wParam));
     Global::UpdateModifiers(wParam, lParam);
 
     if (IsShiftVk(LOWORD(wParam)))
@@ -1677,6 +1695,7 @@ STDAPI CMetasequoiaIME::OnKeyUp(ITfContext *pContext, WPARAM wParam, LPARAM lPar
         *pIsEaten = FALSE;
         return S_OK;
     }
+    _liveSDKeyObservation.KeyUp(static_cast<UINT>(wParam));
     Global::UpdateModifiers(wParam, lParam);
 
     if (IsShiftVk(LOWORD(wParam)))

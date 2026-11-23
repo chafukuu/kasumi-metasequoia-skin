@@ -116,7 +116,7 @@ extern const WCHAR StringDelimiter = L'\"';
 //---------------------------------------------------------------------
 // defined item in setting file table [PreservedKey] section
 //---------------------------------------------------------------------
-extern const WCHAR ImeModeDescription[] = L"Chinese/English input (Shift)";
+extern const WCHAR ImeModeDescription[] = L"Chinese/English input (Ctrl)";
 extern const WCHAR ImeModeDescription02[] = L"Chinese/English input (Ctrl+Alt+Space)";
 extern const WCHAR ImeModeDescription03[] = L"Chinese/English input (Ctrl)";
 extern const WCHAR EnglishInputModeDescription[] = L"English candidate input";

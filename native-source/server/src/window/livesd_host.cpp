@@ -8,13 +8,17 @@
 #include "utils/common_utils.h"
 #include "utils/window_utils.h"
 #include "window/candidate_animation_scheduler.h"
+#include "window/combo_alpha_coverage.h"
+#include "window/livesd_combo.h"
 #include "window/livesd_motion.h"
 #include "window/small_windows.h"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -29,13 +33,18 @@ using Clock = msimeui::DeviceResources::AnimationClock;
 constexpr UINT kFrameMessage = WM_APP + 0x3B1;
 constexpr UINT_PTR kFrameTimer = 0x3B1;
 constexpr UINT_PTR kPointerTimer = 0x3B2;
+// Leave a small scheduling margin above 120 updates per second. UI-thread
+// dispatch and composition commits otherwise lose the margin to timer jitter.
+constexpr auto kActiveFrameInterval = std::chrono::nanoseconds(8'250'000);
+constexpr auto kReducedMotionFrameInterval = std::chrono::milliseconds(250);
 constexpr LONG kInvalidCaretY = -100000;
 constexpr float kTeleportDistanceDip = 48.0f;
 constexpr double kTeleportFadeOutMs = 100.0;
 constexpr double kTeleportFadeInMs = 120.0;
 constexpr double kClickFadeInMs = 180.0;
 constexpr double kClickFadeOutMs = 180.0;
-constexpr double kDragReturnMs = 120.0;
+constexpr double kFocusAnchorWaitMs = 48.0;
+constexpr double kHitRegionRefreshMs = 16.0;
 // Candidate cards are fit-to-content, so their centre can move by a few
 // pixels on every edit (especially while undo is held).  Follow those small
 // anchor changes over a short, frame-driven interval instead of moving the
@@ -44,6 +53,39 @@ constexpr double kCandidateFollowMs = 88.0;
 constexpr wchar_t kWindowClass[] = L"MetasequoiaLiveSD";
 std::mutex postMutex;
 bool acceptingActivity = true;
+std::atomic<std::uint64_t> scheduledFrameWakes{0};
+std::atomic<std::uint64_t> renderedFrames{0};
+std::atomic<std::uint64_t> missedFrameSlots{0};
+std::atomic<std::uint64_t> maximumFrameLatenessNs{0};
+std::atomic<std::uint64_t> maximumRenderDurationNs{0};
+std::atomic<std::uint64_t> lastFrameWakeNs{0};
+std::atomic<std::uint64_t> frameWakeIntervalCount{0};
+std::array<std::atomic<std::uint64_t>, 2048> frameWakeIntervalsNs{};
+std::atomic<std::uint64_t> renderDurationCount{0};
+std::array<std::atomic<std::uint64_t>, 2048> renderDurationsNs{};
+
+void RecordFrameWake(Clock::time_point deadline)
+{
+    const auto now = Clock::now();
+    const auto nowNs = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count());
+    const auto previousNs = lastFrameWakeNs.exchange(nowNs, std::memory_order_relaxed);
+    scheduledFrameWakes.fetch_add(1, std::memory_order_relaxed);
+    if (previousNs != 0 && nowNs > previousNs)
+    {
+        const auto index = frameWakeIntervalCount.fetch_add(1, std::memory_order_relaxed);
+        frameWakeIntervalsNs[index % frameWakeIntervalsNs.size()].store(nowNs - previousNs, std::memory_order_relaxed);
+    }
+    if (now <= deadline)
+        return;
+    const auto lateness =
+        static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now - deadline).count());
+    auto maximum = maximumFrameLatenessNs.load(std::memory_order_relaxed);
+    while (maximum < lateness &&
+           !maximumFrameLatenessNs.compare_exchange_weak(maximum, lateness, std::memory_order_relaxed))
+    {
+    }
+}
 struct CandidateAnchor
 {
     RECT card{};
@@ -52,6 +94,15 @@ struct CandidateAnchor
     std::uint64_t epoch = 0;
 };
 std::optional<CandidateAnchor> candidateAnchor;
+
+struct InputModeUpdate
+{
+    std::uint64_t client = 0;
+    std::uint64_t epoch = 0;
+    bool englishInputMode = false;
+};
+std::optional<InputModeUpdate> pendingInputModeState;
+LiveSDCombo::Counter comboCounter;
 
 double NowMs()
 {
@@ -86,8 +137,11 @@ struct Host
     msimeui::DeviceResources resources;
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> blendedPose;
     CandidateAnimationScheduler scheduler;
+    std::optional<Clock::time_point> frameDeadline;
+    bool frameWaitableTimer = false;
     LiveSDMotion::Model motion;
     std::optional<CandidateSkinCatalog::LiveSD> config;
+    double reservedStageWidthDip = 520.0;
     std::array<std::wstring, 4> images;
     std::wstring clickImage;
     struct AlphaMask
@@ -96,13 +150,61 @@ struct Host
         std::vector<BYTE> alpha;
     };
     std::array<AlphaMask, 4> poseMasks;
+    std::array<LiveSDMotion::VisibleBounds, 4> poseMaskBounds;
+    AlphaMask poseHitMask;
+    unsigned poseHitMaskBits = (std::numeric_limits<unsigned>::max)();
     AlphaMask clickMask;
+    std::array<std::wstring, 10> comboImages;
+    std::wstring comboLabelImage;
+    std::array<AlphaMask, 10> comboMasks;
+    AlphaMask comboLabelMask;
+    std::array<ComboAlphaCoverage::Mask, 10> comboCoverage;
+    ComboAlphaCoverage::Mask comboLabelCoverage;
+    struct ComboGlyph
+    {
+        const AlphaMask *mask = nullptr;
+        D2D1_RECT_F destination{};
+        const ComboAlphaCoverage::Mask *coverage = nullptr;
+        ComboAlphaCoverage::Footprint footprint{};
+    };
+    std::array<ComboGlyph, 4> comboGlyphs{};
+    size_t comboGlyphCount = 0;
+    unsigned renderedComboCount = (std::numeric_limits<unsigned>::max)();
+    float renderedComboScale = 1.0f;
+    float comboOpacity = 0.0f;
     HRGN hitRegion = nullptr;
+    std::vector<RECT> hitSpans;
+    std::vector<DWORD> hitRegionData;
+    double lastHitRegionUpdateMs = -1.0e15;
+    bool hitRegionNeedsRefresh = true;
+    bool hitRegionClickActive = false;
+    unsigned hitRegionPoseBits = (std::numeric_limits<unsigned>::max)();
     bool pointerDown = false;
     bool dragging = false;
+    bool dragHitRegionRelaxed = false;
     POINT pointerStart{};
+    POINT pointerLast{};
     POINT dragOrigin{};
+    double dragPoseStartXDip = 0.0;
+    double dragPoseStartYDip = 0.0;
     std::optional<POINT> manualOrigin;
+    std::optional<double> manualScreenXDip;
+    std::optional<double> manualScreenYDip;
+    bool manualDisplayBoundaryStage = false;
+    bool chineseAnchoredOnDisplay = false;
+    struct ChineseReturn
+    {
+        double offsetX = 0.0;
+        double offsetY = 0.0;
+        double startMs = 0.0;
+        double velocityX = 0.0;
+        double velocityY = 0.0;
+    };
+    std::optional<ChineseReturn> chineseReturn;
+    bool manualPositionPinned = false;
+    std::optional<POINT> pendingFocusCaret;
+    double pendingFocusCaretDueMs = 0.0;
+    bool awaitingCandidateAfterCaret = false;
     LiveSDMotion::Pose heldPose{};
     double clickStartMs = 0.0;
     double clickUntilMs = 0.0;
@@ -169,12 +271,61 @@ struct Host
         return expanded;
     }
 
+    static LiveSDMotion::VisibleBounds VisibleBoundsForMask(const AlphaMask &mask)
+    {
+        if (!mask.width || !mask.height || mask.alpha.empty())
+            return {0.0, 0.0, 1.0, 1.0};
+        UINT left = mask.width, top = mask.height, right = 0, bottom = 0;
+        for (UINT y = 0; y < mask.height; ++y)
+            for (UINT x = 0; x < mask.width; ++x)
+                if (mask.alpha[static_cast<size_t>(y) * mask.width + x])
+                {
+                    left = (std::min)(left, x);
+                    top = (std::min)(top, y);
+                    right = (std::max)(right, x + 1);
+                    bottom = (std::max)(bottom, y + 1);
+                }
+        if (left >= right || top >= bottom)
+            return {0.0, 0.0, 1.0, 1.0};
+        return {static_cast<double>(left) / mask.width, static_cast<double>(top) / mask.height,
+                static_cast<double>(right) / mask.width, static_cast<double>(bottom) / mask.height};
+    }
+
     void UpdateHitRegion(const D2D1_MATRIX_3X2_F &poseTransform, const D2D1_RECT_F &poseDestination,
                          const D2D1_MATRIX_3X2_F &clickTransform, const D2D1_RECT_F &clickDestination,
                          const LiveSDMotion::Pose &pose, bool clicked, float clickOpacity, float opacity)
     {
         if (!placement)
             return;
+        const double nowMs = NowMs();
+        unsigned activePoseBits = 0;
+        for (size_t i = 0; i < pose.weights.size(); ++i)
+            if (pose.weights[i] > 0.001)
+                activePoseBits |= 1U << i;
+        if (!hitRegionNeedsRefresh && clicked == hitRegionClickActive && activePoseBits == hitRegionPoseBits &&
+            nowMs - lastHitRegionUpdateMs < kHitRegionRefreshMs)
+            return;
+        if (activePoseBits != poseHitMaskBits)
+        {
+            poseHitMask = {};
+            poseHitMaskBits = activePoseBits;
+            for (size_t i = 0; i < poseMasks.size(); ++i)
+            {
+                if (!(activePoseBits & (1U << i)) || !poseMasks[i].width || !poseMasks[i].height ||
+                    poseMasks[i].alpha.size() != static_cast<size_t>(poseMasks[i].width) * poseMasks[i].height)
+                    continue;
+                if (!poseHitMask.width)
+                {
+                    poseHitMask.width = poseMasks[i].width;
+                    poseHitMask.height = poseMasks[i].height;
+                    poseHitMask.alpha.assign(poseMasks[i].alpha.size(), 0);
+                }
+                if (poseMasks[i].width != poseHitMask.width || poseMasks[i].height != poseHitMask.height)
+                    continue;
+                for (size_t pixel = 0; pixel < poseHitMask.alpha.size(); ++pixel)
+                    poseHitMask.alpha[pixel] = (std::max)(poseHitMask.alpha[pixel], poseMasks[i].alpha[pixel]);
+            }
+        }
         const auto makeInverse = [](const D2D1_MATRIX_3X2_F &transform) {
             auto inverse = D2D1::Matrix3x2F(transform._11, transform._12, transform._21, transform._22, transform._31,
                                             transform._32);
@@ -184,7 +335,10 @@ struct Host
         const bool poseInvertible = poseInverse.Invert();
         auto clickInverse = makeInverse(clickTransform);
         const bool clickInvertible = clickInverse.Invert();
-        std::vector<RECT> spans;
+        auto &spans = hitSpans;
+        spans.clear();
+        if (spans.capacity() < static_cast<size_t>(placement->height))
+            spans.reserve(static_cast<size_t>(placement->height) * 2);
         const auto inside = [&](int x, int y) {
             if (opacity < 0.05f)
                 return false;
@@ -207,10 +361,12 @@ struct Host
             if (clicked && clickOpacity * opacity >= 0.05f &&
                 sample(clickInverse, clickInvertible, clickDestination, clickMask))
                 return true;
-            if ((!clicked || (1.0f - clickOpacity) * opacity >= 0.05f))
-                for (size_t i = 0; i < poseMasks.size(); ++i)
-                    if (pose.weights[i] > 0.001 && sample(poseInverse, poseInvertible, poseDestination, poseMasks[i]))
-                        return true;
+            if ((!clicked || (1.0f - clickOpacity) * opacity >= 0.05f) &&
+                sample(poseInverse, poseInvertible, poseDestination, poseHitMask))
+                return true;
+            for (size_t i = 0; comboOpacity > 0.0f && i < comboGlyphCount; ++i)
+                if (comboGlyphs[i].coverage->ContainsPixel(comboGlyphs[i].footprint, x, y))
+                    return true;
             return false;
         };
         const auto bounds = [](const D2D1_MATRIX_3X2_F &transform, const D2D1_RECT_F &destination) {
@@ -221,7 +377,31 @@ struct Host
                                                 matrix.TransformPoint({destination.left, destination.bottom}),
                                                 matrix.TransformPoint({destination.right, destination.bottom})};
         };
-        const auto poseCorners = bounds(poseTransform, poseDestination);
+        D2D1_RECT_F visibleDestination = poseDestination;
+        bool hasVisibleBounds = false;
+        for (size_t index = 0; index < poseMaskBounds.size(); ++index)
+        {
+            if (pose.weights[index] <= 0.001)
+                continue;
+            const auto &source = poseMaskBounds[index];
+            const float width = poseDestination.right - poseDestination.left;
+            const float height = poseDestination.bottom - poseDestination.top;
+            const auto visible = D2D1::RectF(poseDestination.left + static_cast<float>(source.left) * width,
+                                             poseDestination.top + static_cast<float>(source.top) * height,
+                                             poseDestination.left + static_cast<float>(source.right) * width,
+                                             poseDestination.top + static_cast<float>(source.bottom) * height);
+            if (!hasVisibleBounds)
+                visibleDestination = visible;
+            else
+            {
+                visibleDestination.left = (std::min)(visibleDestination.left, visible.left);
+                visibleDestination.top = (std::min)(visibleDestination.top, visible.top);
+                visibleDestination.right = (std::max)(visibleDestination.right, visible.right);
+                visibleDestination.bottom = (std::max)(visibleDestination.bottom, visible.bottom);
+            }
+            hasVisibleBounds = true;
+        }
+        const auto poseCorners = bounds(poseTransform, visibleDestination);
         const auto clickCorners = bounds(clickTransform, clickDestination);
         float left = poseCorners[0].x, right = left, top = poseCorners[0].y, bottom = top;
         const auto includeCorners = [&](const auto &corners) {
@@ -236,6 +416,17 @@ struct Host
         includeCorners(poseCorners);
         if (clicked && clickOpacity > 0.0f)
             includeCorners(clickCorners);
+        for (size_t i = 0; i < comboGlyphCount; ++i)
+        {
+            // D2D's quad coverage can touch a pixel whose centre lies just
+            // outside a fractional destination edge. Include one physical
+            // pixel of sampling support, independent of the monitor's DPI.
+            const float fringeDip = 1.0f / placement->scale;
+            const auto &r = comboGlyphs[i].destination;
+            includeCorners(
+                bounds(D2D1::Matrix3x2F::Identity(),
+                       D2D1::RectF(r.left - fringeDip, r.top - fringeDip, r.right + fringeDip, r.bottom + fringeDip)));
+        }
         const int x0 = (std::clamp)(static_cast<int>(std::floor(left * placement->scale)), 0, placement->width);
         const int x1 = (std::clamp)(static_cast<int>(std::ceil(right * placement->scale)), 0, placement->width);
         const int y0 = (std::clamp)(static_cast<int>(std::floor(top * placement->scale)), 0, placement->height);
@@ -261,7 +452,8 @@ struct Host
         else
         {
             const size_t bytes = sizeof(RGNDATAHEADER) + spans.size() * sizeof(RECT);
-            std::vector<DWORD> data((bytes + sizeof(DWORD) - 1) / sizeof(DWORD));
+            auto &data = hitRegionData;
+            data.resize((bytes + sizeof(DWORD) - 1) / sizeof(DWORD));
             auto *region = reinterpret_cast<RGNDATA *>(data.data());
             region->rdh = {sizeof(RGNDATAHEADER),
                            RDH_RECTANGLES,
@@ -276,15 +468,47 @@ struct Host
         if (hitRegion && EqualRgn(hitRegion, next))
         {
             DeleteObject(next);
+            lastHitRegionUpdateMs = nowMs;
+            hitRegionNeedsRefresh = false;
+            hitRegionClickActive = clicked;
+            hitRegionPoseBits = activePoseBits;
             return;
         }
         if (hitRegion)
             DeleteObject(hitRegion);
         hitRegion = next;
+        lastHitRegionUpdateMs = nowMs;
+        hitRegionNeedsRefresh = false;
+        hitRegionClickActive = clicked;
+        hitRegionPoseBits = activePoseBits;
         // Window regions participate in cross-process hit testing. The empty
         // stage is outside the HWND, rather than relying on HTTRANSPARENT.
         HRGN ownedByWindow = CreateRectRgn(0, 0, 0, 0);
         CombineRgn(ownedByWindow, hitRegion, nullptr, RGN_COPY);
+        if (!SetWindowRgn(window, ownedByWindow, FALSE))
+            DeleteObject(ownedByWindow);
+    }
+
+    void SetFullStageHitRegion()
+    {
+        if (!window || !placement)
+            return;
+        HRGN next = CreateRectRgn(0, 0, placement->width, placement->height);
+        if (!next)
+            return;
+        if (hitRegion && EqualRgn(hitRegion, next))
+        {
+            DeleteObject(next);
+            hitRegionNeedsRefresh = true;
+            return;
+        }
+        if (hitRegion)
+            DeleteObject(hitRegion);
+        hitRegion = next;
+        hitRegionNeedsRefresh = true;
+        HRGN ownedByWindow = CreateRectRgn(0, 0, placement->width, placement->height);
+        if (!ownedByWindow)
+            return;
         if (!SetWindowRgn(window, ownedByWindow, FALSE))
             DeleteObject(ownedByWindow);
     }
@@ -294,17 +518,73 @@ struct Host
         if (!config || clickImage.empty() || clickMask.alpha.empty())
             return;
         const double nowMs = NowMs();
-        heldPose = motion.Sample(nowMs);
+        heldPose = VisualPose(nowMs);
+        if (motion.DisplayBoundaryMode() && manualScreenXDip)
+            heldPose.xDip = *manualScreenXDip;
+        if (motion.DisplayBoundaryMode() && manualScreenYDip)
+            heldPose.yDip = *manualScreenYDip;
         clickStartMs = nowMs;
         clickUntilMs = clickStartMs + config->clickDurationMs;
+        hitRegionNeedsRefresh = true;
         resources.SetAnimationEpoch(Clock::now());
         Render();
     }
 
+    std::array<double, 4> ChineseReturnOffset(double nowMs) const
+    {
+        if (!chineseReturn)
+            return {};
+        const double elapsed = (std::max)(0.0, nowMs - chineseReturn->startMs);
+        constexpr double rate = 5.5 / 100.0;
+        const double decay = std::exp(-rate * elapsed);
+        const double slopeX = chineseReturn->velocityX + rate * chineseReturn->offsetX;
+        const double slopeY = chineseReturn->velocityY + rate * chineseReturn->offsetY;
+        const double x = chineseReturn->offsetX + slopeX * elapsed;
+        const double y = chineseReturn->offsetY + slopeY * elapsed;
+        return {x * decay, y * decay, (slopeX - rate * x) * decay, (slopeY - rate * y) * decay};
+    }
+
+    LiveSDMotion::Pose VisualPose(double nowMs)
+    {
+        auto pose = motion.Sample(nowMs);
+        if (manualScreenXDip)
+            pose.xDip = *manualScreenXDip;
+        if (manualScreenYDip)
+            pose.yDip = *manualScreenYDip;
+        if (chineseReturn)
+        {
+            const auto offset = ChineseReturnOffset(nowMs);
+            pose.xDip += offset[0];
+            pose.yDip += offset[1];
+            pose = motion.FitPoseToDisplay(pose);
+            if ((std::max)(std::abs(offset[0]), std::abs(offset[1])) < 0.1 &&
+                (std::max)(std::abs(offset[2]), std::abs(offset[3])) < 0.01)
+                chineseReturn.reset();
+        }
+        return pose;
+    }
+
+    void FollowChineseFootY(double footYDip)
+    {
+        if (std::abs(motion.FootYDip() - footYDip) < 0.01)
+            return;
+        const double nowMs = NowMs();
+        const auto from = VisualPose(nowMs);
+        const auto offset = ChineseReturnOffset(nowMs);
+        motion.SetFootYDip(footYDip);
+        const auto to = motion.Sample(nowMs);
+        // Preserve return position and velocity when the candidate moves on
+        // the unchanged display surface; repeated layout updates must not snap.
+        chineseReturn = ChineseReturn{from.xDip - to.xDip, from.yDip - to.yDip, nowMs, offset[2], offset[3]};
+    }
+
     void CancelPointer()
     {
+        if (dragHitRegionRelaxed)
+            hitRegionNeedsRefresh = true;
         pointerDown = false;
         dragging = false;
+        dragHitRegionRelaxed = false;
         if (window)
             KillTimer(window, kPointerTimer);
         if (GetCapture() == window)
@@ -315,30 +595,123 @@ struct Host
     {
         if (!pointerDown || !placement)
             return false;
-        const int dx = point.x - pointerStart.x, dy = point.y - pointerStart.y;
+        pointerLast = point;
+        int dx = point.x - pointerStart.x, dy = point.y - pointerStart.y;
         const UINT dpi = static_cast<UINT>(std::lround(placement->scale * 96.0f));
         dragging = dragging || std::abs(dx) >= GetSystemMetricsForDpi(SM_CXDRAG, dpi) ||
                    std::abs(dy) >= GetSystemMetricsForDpi(SM_CYDRAG, dpi);
         if (!dragging)
             return false;
+        const bool beganDragging = !dragHitRegionRelaxed;
+        if (beganDragging)
+        {
+            // Stop a pending return/fade at the pose the user actually grabbed.
+            const auto grabbed = heldPose;
+            const double screenX = placement->x + grabbed.xDip * placement->scale;
+            const double screenY = placement->y + grabbed.yDip * placement->scale;
+            chineseReturn.reset();
+            chineseAnchoredOnDisplay = false;
+            pendingPlacement.reset();
+            candidateFollowFrom.reset();
+            candidateFollowTarget.reset();
+            placementFade = PlacementFade::None;
+            if (manualDisplayBoundaryStage)
+            {
+                motion.SetDisplayBoundaryMode(true);
+                motion.SetPositionDip((screenX - placement->x) / placement->scale,
+                                      (screenY - placement->y) / placement->scale);
+                dragPoseStartXDip = grabbed.xDip;
+                dragPoseStartYDip = grabbed.yDip;
+            }
+        }
+        if (dragging && !motion.DisplayBoundaryMode() && !englishInputMode)
+        {
+            // Chinese normally uses the compact candidate stage. Once a real
+            // drag starts, promote that stage to the current monitor so the
+            // pointer can cross the whole screen without clamping at the
+            // candidate-card-sized HWND. Hide the old composition before
+            // moving/resizing the HWND; otherwise its compact frame can be
+            // exposed at the monitor origin until the full-stage present.
+            if (IsWindowVisible(window))
+            {
+                ShowWindow(window, SW_HIDE);
+                revealAfterPresent = true;
+            }
+            manualDisplayBoundaryStage = true;
+            manualPositionPinned = false;
+            manualOrigin.reset();
+            pendingFocusCaret.reset();
+            Place();
+            if (!placement)
+                return false;
+            const auto promoted = motion.Sample(NowMs());
+            dragPoseStartXDip = promoted.xDip;
+            dragPoseStartYDip = promoted.yDip;
+        }
+        if (beganDragging)
+        {
+            // Keep the captured pointer on the stable surface while dragging;
+            // rebuilding the alpha HRGN for every mouse sample causes flicker.
+            SetFullStageHitRegion();
+            dragHitRegionRelaxed = true;
+        }
+        if (motion.DisplayBoundaryMode() && (englishInputMode || manualDisplayBoundaryStage))
+        {
+            motion.SetPositionDip(dragPoseStartXDip + dx / placement->scale, dragPoseStartYDip + dy / placement->scale);
+            // Sample includes the visible-pose edge protection. Preserve that
+            // same anchor during the press and release, including screen corners.
+            const auto placedPose = motion.Sample(NowMs());
+            manualScreenXDip = placedPose.xDip;
+            manualScreenYDip = placedPose.yDip;
+            heldPose.xDip = *manualScreenXDip;
+            heldPose.yDip = *manualScreenYDip;
+            if (beganDragging)
+                Render();
+            return true;
+        }
         manualOrigin = POINT{dragOrigin.x + dx, dragOrigin.y + dy};
         Place();
         return true;
+    }
+
+    void ReturnChineseToAnchor()
+    {
+        if (englishInputMode || pointerDown || !manualDisplayBoundaryStage || chineseAnchoredOnDisplay || !placement ||
+            !config)
+            return;
+        const double nowMs = NowMs();
+        const auto from = VisualPose(nowMs);
+        const auto compact = CalculatePlacement(true);
+        if (!compact)
+            return;
+        const double scale = (std::max)(placement->scale, 0.001f);
+        const bool candidateBound = hasCandidate || keepCandidateAnchor;
+        const double leftDip = ((candidateBound ? candidate.left : compact->x) - placement->x) / scale;
+        const double widthDip = candidateBound ? (candidate.right - candidate.left) / scale : config->stageWidthDip;
+        chineseAnchoredOnDisplay = true;
+        manualScreenXDip.reset();
+        manualScreenYDip.reset();
+        motion.SetDisplayBoundaryMode(false);
+        motion.SetFootYDip((compact->y - placement->y) / scale + config->footYDip);
+        motion.SetCandidateIntervalImmediateDip(leftDip, widthDip);
+        motion.SetPositionDip(motion.MovementCenterDip());
+        const auto to = motion.Sample(nowMs);
+        chineseReturn = ChineseReturn{from.xDip - to.xDip, from.yDip - to.yDip, nowMs};
     }
 
     void FinishPointer(POINT point)
     {
         if (!pointerDown)
             return;
-        MovePointer(point);
+        if (point.x != pointerLast.x || point.y != pointerLast.y)
+            MovePointer(point);
         const bool click = !dragging;
         CancelPointer();
         if (click)
             StartClick();
         else
         {
-            // Preserve the dragged location until a candidate card appears.
-            // That transition owns the return to the candidate anchor.
+            // Hold the release until the next Chinese pulse/layout starts return.
             Render();
         }
     }
@@ -355,7 +728,10 @@ struct Host
         POINT point{};
         if (!GetCursorPos(&point))
         {
+            const bool restoreHitRegion = dragHitRegionRelaxed;
             CancelPointer();
+            if (restoreHitRegion)
+                Render();
             return;
         }
         // A no-activate background HWND cannot capture mouse messages outside
@@ -364,8 +740,8 @@ struct Host
         const int button = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
         if (!(GetAsyncKeyState(button) & 0x8000))
             FinishPointer(point);
-        else if (MovePointer(point))
-            Render();
+        else
+            MovePointer(point);
     }
     std::uint64_t client = 0;
     std::uint64_t epoch = 0;
@@ -377,11 +753,13 @@ struct Host
     float candidateScale = 1.0f;
     std::optional<double> candidateStageLeftOffsetDip;
     bool hasCandidate = false;
+    bool englishInputMode = false;
     bool keepCandidateAnchor = false;
     bool candidateContentResizedRequest = false;
     bool focused = false;
     bool visible = false;
     bool placing = false;
+    bool revealAfterPresent = false;
     float renderScale = 0.0f;
     std::optional<Placement> placement;
     std::optional<Placement> candidateFollowFrom;
@@ -436,6 +814,7 @@ struct Host
         clickStartMs = 0.0;
         clickUntilMs = 0.0;
         scheduler.Cancel();
+        frameDeadline.reset();
         pendingPlacement.reset();
         candidateFollowFrom.reset();
         candidateFollowTarget.reset();
@@ -447,12 +826,66 @@ struct Host
         placementFade = PlacementFade::None;
         placementFadeStartOpacity = 1.0f;
         transparentPlacementPresented = false;
+        manualPositionPinned = false;
+        manualDisplayBoundaryStage = false;
+        chineseAnchoredOnDisplay = false;
+        chineseReturn.reset();
+        pendingFocusCaret.reset();
+        awaitingCandidateAfterCaret = false;
         if (window)
         {
             KillTimer(window, kFrameTimer);
             ShowWindow(window, SW_HIDE);
         }
+        revealAfterPresent = false;
         visible = false;
+    }
+
+    void ScheduleFrameAt(Clock::time_point deadline)
+    {
+        if (!window)
+            return;
+        if (scheduler.Schedule(deadline))
+        {
+            frameWaitableTimer = true;
+            // Schedule() may keep an already-armed earlier deadline. Retain
+            // the timer's actual phase rather than the newer request.
+            frameDeadline = scheduler.ScheduledDeadline();
+            KillTimer(window, kFrameTimer);
+            return;
+        }
+
+        // The waitable timer is preferred (and high-resolution where supported).
+        // WM_TIMER is a last-resort fallback and may be limited by Windows' timer
+        // resolution, but the next scheduled deadline remains phase aligned.
+        frameWaitableTimer = false;
+        frameDeadline = deadline;
+        const auto now = Clock::now();
+        const auto remaining = deadline > now ? deadline - now : Clock::duration::zero();
+        const auto delayMs = (std::max)(1LL, std::chrono::ceil<std::chrono::milliseconds>(remaining).count());
+        const auto boundedDelay = (std::min)(delayMs, static_cast<long long>((std::numeric_limits<UINT>::max)()));
+        SetTimer(window, kFrameTimer, static_cast<UINT>(boundedDelay), nullptr);
+    }
+
+    void ScheduleNextFrame(Clock::time_point frameStarted, bool active)
+    {
+        if (!active)
+        {
+            ScheduleFrameAt(frameStarted + kReducedMotionFrameInterval);
+            return;
+        }
+
+        Clock::time_point deadline = frameDeadline.value_or(frameStarted) + kActiveFrameInterval;
+        const auto now = Clock::now();
+        if (deadline <= now)
+        {
+            // Render only the latest pose. Skip missed slots arithmetically so
+            // a blocked UI thread cannot trigger a catch-up burst.
+            const auto skipped = (now - deadline) / kActiveFrameInterval + 1;
+            missedFrameSlots.fetch_add(static_cast<std::uint64_t>(skipped), std::memory_order_relaxed);
+            deadline += kActiveFrameInterval * skipped;
+        }
+        ScheduleFrameAt(deadline);
     }
 
     bool RefreshConfig()
@@ -473,16 +906,40 @@ struct Host
         candidateStageLeftOffsetDip.reset();
         resources.ClearImageCaches();
         blendedPose.Reset();
+        hitRegionNeedsRefresh = true;
         config.reset();
+        comboGlyphCount = 0;
+        comboImages.fill({});
+        comboLabelImage.clear();
         const auto root = std::filesystem::path(CommonUtils::get_ime_data_path_w()) / L"skins";
         const auto package = CandidateSkinCatalog::LoadSupported(root, id, layout, light ? "light" : "dark");
         if (!package || !package->liveSD)
             return true;
         config = package->liveSD;
+        reservedStageWidthDip = (std::max)(config->stageWidthDip, package->maxWidthDip.value_or(0.0));
         const auto folder = root / std::filesystem::u8path(id);
+        if (config->combo)
+        {
+            for (size_t i = 0; i < comboImages.size(); ++i)
+            {
+                comboImages[i] = (folder / std::filesystem::u8path(config->combo->digitImages[i])).wstring();
+                comboMasks[i] = LoadAlpha(comboImages[i]);
+                comboCoverage[i].Reset(comboMasks[i].width, comboMasks[i].height, comboMasks[i].alpha);
+            }
+            comboLabelImage = (folder / std::filesystem::u8path(config->combo->labelImage)).wstring();
+            comboLabelMask = LoadAlpha(comboLabelImage);
+            comboLabelCoverage.Reset(comboLabelMask.width, comboLabelMask.height, comboLabelMask.alpha);
+            const bool decoded =
+                !comboLabelMask.alpha.empty() && std::all_of(comboMasks.begin(), comboMasks.end(),
+                                                             [](const AlphaMask &mask) { return !mask.alpha.empty(); });
+            if (!decoded)
+                config->combo.reset();
+        }
         clickImage = config->clickImage.empty() ? std::wstring()
                                                 : (folder / std::filesystem::u8path(config->clickImage)).wstring();
         clickMask = LoadAlpha(clickImage);
+        poseHitMask = {};
+        poseHitMaskBits = (std::numeric_limits<unsigned>::max)();
         clickStartMs = 0.0;
         clickUntilMs = 0.0;
         const std::array<std::string, 4> relative = {config->idleImage, config->idle2Image, config->happyImage,
@@ -492,16 +949,21 @@ struct Host
             images[i] = (folder / std::filesystem::u8path(relative[i])).wstring();
             poseMasks[i] = LoadAlpha(images[i]);
         }
-        motion = LiveSDMotion::Model(
-            {config->stageWidthDip, config->widthDip, config->heightDip, config->stageHeightDip, config->footYDip});
+        motion = LiveSDMotion::Model({config->stageWidthDip, config->widthDip, config->heightDip,
+                                      config->stageHeightDip, config->footYDip, config->rightBoundaryInsetDip});
         motion.Reset(NowMs());
-        motion.SetCandidateAnchorVisible(hasCandidate);
+        std::array<LiveSDMotion::VisibleBounds, 4> frameBounds;
+        for (size_t i = 0; i < poseMasks.size(); ++i)
+            frameBounds[i] = VisibleBoundsForMask(poseMasks[i]);
+        poseMaskBounds = frameBounds;
+        motion.SetVisibleFrameBounds(frameBounds);
+        motion.SetCandidateAnchorVisible(hasCandidate && !englishInputMode);
         return true;
     }
 
     bool EnsureWindow();
 
-    std::optional<Placement> CalculatePlacement()
+    std::optional<Placement> CalculatePlacement(bool compactChinese = false)
     {
         if (!config || !window)
             return std::nullopt;
@@ -511,9 +973,11 @@ struct Host
         // instead of staying above the card.
         // Closing a candidate card must not pull the stage back to the caret.
         // Retain its last anchor until a new card or a substantial caret jump.
-        const bool useCandidateAnchor = hasCandidate || keepCandidateAnchor;
+        const bool useDisplayBoundaryStage =
+            (englishInputMode || (manualDisplayBoundaryStage && !compactChinese)) && !manualOrigin;
+        const bool useCandidateAnchor = !englishInputMode && (hasCandidate || keepCandidateAnchor);
         const POINT placementPoint =
-            manualOrigin && placement
+            manualOrigin && placement && !englishInputMode
                 ? POINT{manualOrigin->x + placement->width / 2, manualOrigin->y + placement->height / 2}
                 : (useCandidateAnchor ? POINT{candidate.left, candidate.top} : caret);
         const float queriedScale = GetScaleForPoint(placementPoint);
@@ -521,29 +985,49 @@ struct Host
             useCandidateAnchor && !manualOrigin ? candidateScale : (queriedScale > 0.0f ? queriedScale : 1.0f);
         MONITORINFO monitor{sizeof(monitor)};
         RECT work{};
+        RECT display{};
         if (GetMonitorInfoW(MonitorFromPoint(placementPoint, MONITOR_DEFAULTTONEAREST), &monitor))
+        {
             work = monitor.rcWork;
+            display = monitor.rcMonitor;
+        }
         else
+        {
             SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+            display = work;
+        }
         if (work.right <= work.left || work.bottom <= work.top)
             return std::nullopt;
-        // A small work area can be narrower than the configured DIP stage.
-        // Fit the complete stage proportionally before clamping its origin.
-        scale = (std::min)(scale, static_cast<float>((work.right - work.left) / config->stageWidthDip));
+        // The surface stays fixed while typing. English uses the monitor's
+        // full rectangle; Chinese reserves the skin's maximum
+        // width and changes only the model's live candidate boundary.
+        if (useDisplayBoundaryStage)
+        {
+            const double minimumWidthDip = config->widthDip + 24.0;
+            scale = (std::min)(scale, static_cast<float>((display.right - display.left) / minimumWidthDip));
+        }
+        else
+        {
+            // A small work area can be narrower than the configured DIP stage.
+            // Fit the complete stage proportionally before clamping its origin.
+            scale = (std::min)(scale, static_cast<float>((work.right - work.left) / reservedStageWidthDip));
+        }
         scale = (std::min)(scale, static_cast<float>((work.bottom - work.top) / config->stageHeightDip));
-        const int width = (std::max)(1, (std::min)(static_cast<int>(std::ceil(config->stageWidthDip * scale)),
-                                                   static_cast<int>(work.right - work.left)));
-        const int height = (std::max)(1, (std::min)(static_cast<int>(std::ceil(config->stageHeightDip * scale)),
-                                                    static_cast<int>(work.bottom - work.top)));
-        int x = caret.x - static_cast<int>(config->stageWidthDip * 0.25 * scale);
+        const int width = useDisplayBoundaryStage
+                              ? (std::max)(1, static_cast<int>(display.right - display.left))
+                              : (std::max)(1, (std::min)(static_cast<int>(std::ceil(reservedStageWidthDip * scale)),
+                                                         static_cast<int>(work.right - work.left)));
+        const int height = useDisplayBoundaryStage
+                               ? static_cast<int>(display.bottom - display.top)
+                               : (std::max)(1, (std::min)(static_cast<int>(std::ceil(config->stageHeightDip * scale)),
+                                                          static_cast<int>(work.bottom - work.top)));
+        int x =
+            useDisplayBoundaryStage ? display.left : caret.x - static_cast<int>(config->stageWidthDip * 0.25 * scale);
         if (useCandidateAnchor)
         {
-            // Capture the initial centring offset for this candidate session.
-            // The card grows to the right as candidates are appended; deriving
-            // the offset from its live width would push the whole movement area
-            // right by half of every width increase.
-            const double initialOffsetDip =
-                ((candidate.right - candidate.left) - width) / (2.0 * (std::max)(scale, 0.001f));
+            // Candidate placement already reserves the maximum card width.
+            // Keep the left origin stable while its live movement bounds grow.
+            const double initialOffsetDip = 0.0;
             if (!candidateStageLeftOffsetDip)
                 candidateStageLeftOffsetDip = initialOffsetDip;
             x = candidate.left + static_cast<int>(std::lround(*candidateStageLeftOffsetDip * scale));
@@ -551,15 +1035,21 @@ struct Host
         int y = (useCandidateAnchor ? candidate.top : caret.y) - height;
         if (useCandidateAnchor && y < work.top && candidate.bottom + height <= work.bottom)
             y = candidate.bottom;
-        if (manualOrigin)
+        if (manualOrigin && !englishInputMode)
         {
             x = manualOrigin->x;
             y = manualOrigin->y;
         }
         x = (std::clamp)(x, static_cast<int>(work.left),
                          (std::max)(static_cast<int>(work.left), static_cast<int>(work.right) - width));
-        y = (std::clamp)(y, static_cast<int>(work.top),
-                         (std::max)(static_cast<int>(work.top), static_cast<int>(work.bottom) - height));
+        if (useDisplayBoundaryStage)
+        {
+            x = display.left;
+            y = display.top;
+        }
+        else
+            y = (std::clamp)(y, static_cast<int>(work.top),
+                             (std::max)(static_cast<int>(work.top), static_cast<int>(work.bottom) - height));
         return Placement{x, y, width, height, scale};
     }
 
@@ -614,11 +1104,63 @@ struct Host
         return placementFadeStartOpacity + (1.0f - placementFadeStartOpacity) * eased;
     }
 
+    void UpdateCandidateInterval(const Placement &target)
+    {
+        if (englishInputMode || !config)
+            return;
+        if (hasCandidate || keepCandidateAnchor)
+        {
+            // The reserved host may be clamped left of the actual card near
+            // a screen edge. Its local origin is not necessarily the card's.
+            // Keep a dragged Chinese host's interval in its own coordinates.
+            const double leftDip = manualOrigin ? motion.CandidateMovementLeftDip()
+                                                : (candidate.left - target.x) / (std::max)(target.scale, 0.001f);
+            motion.SetCandidateIntervalDip(leftDip,
+                                           (candidate.right - candidate.left) / (std::max)(target.scale, 0.001f));
+        }
+        else
+            motion.SetCandidateWidthDip(config->stageWidthDip);
+    }
+
     void ApplyPlacement(const Placement &target)
     {
         const bool moved = !placement || placement->x != target.x || placement->y != target.y;
         const bool resized = !placement || placement->width != target.width || placement->height != target.height;
         const bool targetChanged = resized || !placement || std::abs(renderScale - target.scale) > 0.001f;
+        const bool displayStage =
+            (englishInputMode || (manualDisplayBoundaryStage && !chineseAnchoredOnDisplay)) && !manualOrigin;
+        const double targetStageWidthDip = static_cast<double>(target.width) / (std::max)(target.scale, 0.001f);
+        const double targetStageHeightDip = static_cast<double>(target.height) / (std::max)(target.scale, 0.001f);
+        const bool modelSpaceChanged = motion.DisplayBoundaryMode() != displayStage ||
+                                       std::abs(motion.StageWidthDip() - targetStageWidthDip) >= 0.01 ||
+                                       std::abs(motion.StageHeightDip() - targetStageHeightDip) >= 0.01;
+        double spriteScreenX = static_cast<double>(caret.x);
+        double spriteScreenY = static_cast<double>(caret.y);
+        if (placement)
+        {
+            auto pose = pointerDown ? heldPose : VisualPose(NowMs());
+            if (manualScreenXDip)
+                pose.xDip = *manualScreenXDip;
+            if (manualScreenYDip)
+                pose.yDip = *manualScreenYDip;
+            spriteScreenX = placement->x + pose.xDip * placement->scale;
+            spriteScreenY = placement->y + pose.yDip * placement->scale;
+        }
+        motion.SetDisplayBoundaryMode(displayStage);
+        motion.SetCandidateAnchorVisible(hasCandidate && !englishInputMode);
+        motion.SetStageSizeDip(targetStageWidthDip, targetStageHeightDip);
+        double footYDip = config ? config->footYDip : 233.0;
+        if (chineseAnchoredOnDisplay)
+            if (const auto compact = CalculatePlacement(true))
+                footYDip += (compact->y - target.y) / (std::max)(target.scale, 0.001f);
+        motion.SetFootYDip(footYDip);
+        if (!displayStage)
+            UpdateCandidateInterval(candidateFollowTarget.value_or(target));
+        if (modelSpaceChanged && displayStage)
+            motion.SetPositionDip((spriteScreenX - target.x) / (std::max)(target.scale, 0.001f),
+                                  (spriteScreenY - target.y) / (std::max)(target.scale, 0.001f));
+        else if (modelSpaceChanged && !englishInputMode)
+            motion.SetPositionDip(motion.MovementCenterDip());
         resources.SetDpiOverride(target.scale * 96.0f);
         placing = true;
         if (moved || resized)
@@ -637,6 +1179,8 @@ struct Host
         }
         renderScale = target.scale;
         placement = target;
+        if (moved || resized || targetChanged)
+            hitRegionNeedsRefresh = true;
     }
 
     void BeginFadeOut(const Placement &target, double nowMs, float opacity)
@@ -768,10 +1312,18 @@ struct Host
     void Place(bool smoothCandidate = false, double smoothDurationMs = kCandidateFollowMs,
                bool smoothLargeTranslation = false)
     {
+        motion.SetCandidateAnchorVisible(hasCandidate && !englishInputMode);
         const auto target = CalculatePlacement();
         if (!target)
             return;
-        if (manualOrigin)
+        if (placement && HasSameStageGeometry(*placement, *target))
+        {
+            UpdateCandidateInterval(*target);
+            if (chineseAnchoredOnDisplay)
+                if (const auto compact = CalculatePlacement(true))
+                    FollowChineseFootY((compact->y - target->y) / (std::max)(target->scale, 0.001f) + config->footYDip);
+        }
+        if (manualOrigin || (pointerDown && manualDisplayBoundaryStage))
         {
             pendingPlacement.reset();
             candidateFollowFrom.reset();
@@ -822,6 +1374,14 @@ struct Host
         AdvanceCandidateFollow(nowMs);
         if (SamePlacement(*placement, *target))
         {
+            if (motion.DisplayBoundaryMode() !=
+                    ((englishInputMode || (manualDisplayBoundaryStage && !chineseAnchoredOnDisplay)) &&
+                     !manualOrigin) ||
+                std::abs(motion.StageWidthDip() -
+                         static_cast<double>(target->width) / (std::max)(target->scale, 0.001f)) >= 0.01 ||
+                std::abs(motion.StageHeightDip() -
+                         static_cast<double>(target->height) / (std::max)(target->scale, 0.001f)) >= 0.01)
+                ApplyPlacement(*target);
             candidateFollowFrom.reset();
             candidateFollowTarget.reset();
             candidateFollowStartMs = 0.0;
@@ -909,6 +1469,101 @@ struct Host
         placementFadeStartOpacity = 1.0f;
     }
 
+    void DrawCombo(ID2D1RenderTarget *target, const LiveSDMotion::Pose &pose, double nowMs, bool animates,
+                   float opacity)
+    {
+        const auto previousGlyphs = comboGlyphs;
+        const auto previousGlyphCount = comboGlyphCount;
+        comboGlyphCount = 0;
+        const float previousOpacity = comboOpacity;
+        comboOpacity = static_cast<float>(comboCounter.Opacity(nowMs, animates));
+        if ((previousOpacity >= 0.05f) != (comboOpacity >= 0.05f) || (previousOpacity > 0.0f) != (comboOpacity > 0.0f))
+            hitRegionNeedsRefresh = true;
+        opacity *= comboOpacity;
+        if (!config || !config->combo || !placement || opacity <= 0.0f)
+            return;
+        const auto &settings = *config->combo;
+        const auto text = std::to_string(comboCounter.DisplayCount());
+        const float pulse = static_cast<float>(comboCounter.Scale(nowMs, animates));
+        float digitHeight = static_cast<float>(settings.digitHeightDip) * pulse;
+        float slotWidth = static_cast<float>(settings.slotWidthDip) * pulse;
+        float labelHeight = static_cast<float>(settings.labelHeightDip);
+        float gap = static_cast<float>(settings.labelGapDip);
+        D2D1_SIZE_F labelSize{};
+        auto *label = resources.GetBitmapFromFile(comboLabelImage, &labelSize);
+        if (!label || labelSize.height <= 0.0f || comboLabelMask.alpha.empty())
+            return;
+        float labelWidth = labelHeight * labelSize.width / labelSize.height;
+        float width = (std::max)(labelWidth, slotWidth * static_cast<float>(text.size()));
+        float height = digitHeight + gap + labelHeight;
+        const float stageWidth = placement->width / placement->scale;
+        const float stageHeight = placement->height / placement->scale;
+        constexpr float edgeMargin = 2.0f;
+        const float fit = (std::min)({1.0f, (std::max)(1.0f, stageWidth - edgeMargin * 2) / width,
+                                      (std::max)(1.0f, stageHeight - edgeMargin * 2) / height});
+        digitHeight *= fit;
+        slotWidth *= fit;
+        labelHeight *= fit;
+        labelWidth *= fit;
+        gap *= fit;
+        width *= fit;
+        height *= fit;
+        const float centre = (std::clamp)(static_cast<float>(pose.xDip + settings.offsetXDip),
+                                          edgeMargin + width * 0.5f, stageWidth - edgeMargin - width * 0.5f);
+        const float top = (std::clamp)(static_cast<float>(pose.yDip - pose.jumpDip + settings.offsetYDip), edgeMargin,
+                                       stageHeight - edgeMargin - height);
+        std::array<ID2D1Bitmap *, 3> digits{};
+        for (size_t i = 0; i < text.size(); ++i)
+        {
+            const size_t digit = static_cast<size_t>(text[i] - '0');
+            D2D1_SIZE_F size{};
+            digits[i] = resources.GetBitmapFromFile(comboImages[digit], &size);
+            if (!digits[i] || size.height <= 0.0f || comboMasks[digit].alpha.empty())
+            {
+                comboGlyphCount = 0;
+                return;
+            }
+            const float glyphWidth = (std::min)(slotWidth, digitHeight * size.width / size.height);
+            const float x = centre + (static_cast<float>(i) - static_cast<float>(text.size() - 1) * 0.5f) * slotWidth;
+            comboGlyphs[comboGlyphCount++] = {
+                &comboMasks[digit], D2D1::RectF(x - glyphWidth * 0.5f, top, x + glyphWidth * 0.5f, top + digitHeight),
+                &comboCoverage[digit]};
+        }
+        comboGlyphs[comboGlyphCount++] = {
+            &comboLabelMask,
+            D2D1::RectF(centre - labelWidth * 0.5f, top + digitHeight + gap, centre + labelWidth * 0.5f, top + height),
+            &comboLabelCoverage};
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> comboContext;
+        target->QueryInterface(IID_PPV_ARGS(comboContext.GetAddressOf()));
+        const auto drawGlyph = [&](ID2D1Bitmap *bitmap, ComboGlyph &glyph) {
+            glyph.footprint =
+                glyph.coverage->Place(glyph.destination.left, glyph.destination.top, glyph.destination.right,
+                                      glyph.destination.bottom, placement->scale);
+            if (comboContext)
+                comboContext->DrawBitmap(bitmap, &glyph.destination, opacity,
+                                         D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+            else
+                target->DrawBitmap(bitmap, glyph.destination, opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        };
+        for (size_t i = 0; i < text.size(); ++i)
+            drawGlyph(digits[i], comboGlyphs[i]);
+        drawGlyph(label, comboGlyphs[comboGlyphCount - 1]);
+        bool moved = previousGlyphCount != comboGlyphCount;
+        for (size_t i = 0; i < comboGlyphCount && !moved; ++i)
+        {
+            const auto &before = previousGlyphs[i].destination;
+            const auto &after = comboGlyphs[i].destination;
+            moved = before.left != after.left || before.top != after.top || before.right != after.right ||
+                    before.bottom != after.bottom;
+        }
+        if (moved || renderedComboCount != comboCounter.Count() || renderedComboScale != pulse * fit)
+        {
+            renderedComboCount = comboCounter.Count();
+            renderedComboScale = pulse * fit;
+            hitRegionNeedsRefresh = true;
+        }
+    }
+
     bool Render()
     {
         if (!visible || !config || !window || placing)
@@ -928,8 +1583,20 @@ struct Host
             Hide();
             return false;
         }
+        const auto frameStarted = Clock::now();
         const bool animates = AnimationsEnabled();
         const double nowMs = NowMs();
+        if (pendingFocusCaret && nowMs >= pendingFocusCaretDueMs)
+        {
+            if (!hasCandidate && !manualDisplayBoundaryStage && !manualPositionPinned)
+            {
+                caret = *pendingFocusCaret;
+                keepCandidateAnchor = false;
+                awaitingCandidateAfterCaret = true;
+                Place();
+            }
+            pendingFocusCaret.reset();
+        }
         AdvancePlacement(nowMs, animates);
         if (!resources.EnsureForComposition(window))
         {
@@ -949,7 +1616,9 @@ struct Host
         target->Clear(D2D1::ColorF(0, 0.0f));
         bool clicked = nowMs < clickUntilMs;
         float clickBlend = clicked ? ClickOpacity(nowMs) : 0.0f;
-        LiveSDMotion::Pose pose = pointerDown ? heldPose : motion.Sample(nowMs);
+        if (!pointerDown && motion.DisplayBoundaryMode() && manualScreenXDip)
+            motion.SetPositionDipExact(*manualScreenXDip, manualScreenYDip.value_or(motion.Sample(nowMs).yDip));
+        LiveSDMotion::Pose pose = pointerDown ? heldPose : VisualPose(nowMs);
         if (!animates)
         {
             pose.jumpDip = 0;
@@ -971,12 +1640,12 @@ struct Host
             D2D1::Matrix3x2F::Scale(static_cast<float>(pose.scaleX), static_cast<float>(pose.scaleY)) *
             D2D1::Matrix3x2F::Rotation(static_cast<float>(pose.rotationDeg)) *
             D2D1::Matrix3x2F::Translation(static_cast<float>(pose.xDip),
-                                          static_cast<float>(config->footYDip - pose.jumpDip + centreY));
+                                          static_cast<float>(pose.yDip - pose.jumpDip + centreY));
         const auto poseDestination =
             D2D1::RectF(static_cast<float>(-config->widthDip / 2), static_cast<float>(-config->heightDip),
                         static_cast<float>(config->widthDip / 2), 0.0f);
         const auto clickTransform =
-            D2D1::Matrix3x2F::Translation(static_cast<float>(pose.xDip), static_cast<float>(config->footYDip));
+            D2D1::Matrix3x2F::Translation(static_cast<float>(pose.xDip), static_cast<float>(pose.yDip));
         const auto clickDestination =
             D2D1::RectF(static_cast<float>(-config->widthDip / 2), static_cast<float>(-config->widthDip),
                         static_cast<float>(config->widthDip / 2), 0.0f);
@@ -994,7 +1663,10 @@ struct Host
         auto *context = resources.GetDeviceContext();
         if (!context)
             loaded = false;
-        auto *clickBitmap = clicked ? resources.GetImageFrame(clickImage) : nullptr;
+        ID2D1Bitmap *nextClickBitmap = nullptr;
+        float clickFrameMix = 0.0f;
+        auto *clickBitmap =
+            clicked ? resources.GetImageFrameBlend(clickImage, &nextClickBitmap, &clickFrameMix) : nullptr;
         if (clicked && !clickBitmap)
         {
             // A missing optional reaction must not hide the normal LiveSD.
@@ -1046,14 +1718,19 @@ struct Host
         if (loaded && context && clicked && clickBitmap && clickBlend > 0.0f)
         {
             target->SetTransform(clickTransform * original);
-            target->DrawBitmap(clickBitmap, clickDestination, placementOpacity * clickBlend,
+            target->DrawBitmap(clickBitmap, clickDestination, placementOpacity * clickBlend * (1.0f - clickFrameMix),
                                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            if (nextClickBitmap && clickFrameMix > 0.0f)
+                target->DrawBitmap(nextClickBitmap, clickDestination, placementOpacity * clickBlend * clickFrameMix,
+                                   D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         }
         if (context)
             context->SetPrimitiveBlend(previousTargetBlend);
         target->SetTransform(original);
-        UpdateHitRegion(poseTransform, poseDestination, clickTransform, clickDestination, pose, clicked, clickBlend,
-                        placementOpacity);
+        DrawCombo(target, pose, nowMs, animates, placementOpacity);
+        if (!(pointerDown && dragging && dragHitRegionRelaxed))
+            UpdateHitRegion(poseTransform, poseDestination, clickTransform, clickDestination, pose, clicked, clickBlend,
+                            placementOpacity);
         const HRESULT result = resources.EndDraw();
         if (result == D2DERR_RECREATE_TARGET || FAILED(result) || FAILED(resources.Present()))
         {
@@ -1067,14 +1744,27 @@ struct Host
             Hide();
             return false;
         }
+        renderedFrames.fetch_add(1, std::memory_order_relaxed);
+        const auto renderDuration = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - frameStarted).count());
+        const auto durationIndex = renderDurationCount.fetch_add(1, std::memory_order_relaxed);
+        renderDurationsNs[durationIndex % renderDurationsNs.size()].store(renderDuration, std::memory_order_relaxed);
+        auto maximum = maximumRenderDurationNs.load(std::memory_order_relaxed);
+        while (maximum < renderDuration &&
+               !maximumRenderDurationNs.compare_exchange_weak(maximum, renderDuration, std::memory_order_relaxed))
+        {
+        }
         if (placementFade == PlacementFade::Out && nowMs - placementFadeStartMs >= placementFadeDurationMs)
             transparentPlacementPresented = true;
-        // One outstanding wake-up, same scheduler primitive as candidates.
-        // Reduced motion still checks focus; it never animates the sprite.
-        const auto delay = animates ? std::chrono::milliseconds(motion.NeedsTurnFrameCadence() ? 12 : 16)
-                                    : std::chrono::milliseconds(250);
-        if (!scheduler.Schedule(Clock::now() + delay))
-            SetTimer(window, kFrameTimer, static_cast<UINT>(delay.count()), nullptr);
+        if (revealAfterPresent)
+        {
+            ShowWindow(window, SW_SHOWNOACTIVATE);
+            revealAfterPresent = false;
+        }
+        // The motion model continuously changes the idle breath as well as
+        // typing/turn/Enter poses, so normal motion uses the 120 Hz clock.
+        // Reduced-motion mode retains its low-frequency ownership check.
+        ScheduleNextFrame(frameStarted, animates || pointerDown);
         return true;
     }
 };
@@ -1088,15 +1778,41 @@ bool ShowActivityOnUiThread(const Activity &activity)
     if (!host)
         host = std::make_unique<Host>();
     const bool hasCaret = activity.caret.y != kInvalidCaretY;
-    const bool actionWithoutCaret = (activity.kind == 1 || activity.kind == 3) && !hasCaret;
-    if (actionWithoutCaret)
+    const bool changed = !host->focused || host->client != activity.client || host->epoch != activity.epoch;
+    const bool isActionUpdate = activity.kind == 1 || activity.kind == 3 || activity.kind == 4;
+    if (isActionUpdate)
     {
-        // Some TSF hosts expose a valid focus session and candidate window but
-        // no readable collapsed caret. The pulse still belongs to the current
-        // host; using its old anchor keeps the mascot above the candidate and
-        // prevents an unresolved point from being clamped onto a monitor edge.
-        if (!host->focused || host->client != activity.client || host->epoch != activity.epoch)
+        // Input actions never change the anchor, even when TSF includes a
+        // readable caret. Updating the motion model is enough: the outstanding
+        // animation frame samples it on the next active tick. Drawing synchronously here
+        // would render an extra full frame for every key, often immediately
+        // before the already-scheduled frame.
+        const bool recoverableEnglishActivity = !host->focused && host->englishInputMode && !hasCaret &&
+                                                (activity.kind == 1 || activity.kind == 3) &&
+                                                host->client == activity.client && host->epoch == activity.epoch &&
+                                                host->config && host->placement && IsWindow(host->window);
+        if ((!host->focused && !recoverableEnglishActivity) || host->client != activity.client ||
+            host->epoch != activity.epoch)
             return false;
+        if (recoverableEnglishActivity)
+        {
+            // A real focus loss hides the existing companion, but a browser or
+            // editor may return focus before it exposes a caret again.  A
+            // sentinel action may revive that same English stage in place;
+            // it must never create a window or recalculate its placement.
+            host->focused = true;
+            if (!host->IsOwnerCurrent())
+            {
+                host->focused = false;
+                return false;
+            }
+            host->visible = true;
+            if (!host->Render())
+                return false;
+            EnsureSmallWindowsTopmost(L"livesd-focus-recover");
+            SyncTopmost();
+            ShowWindow(host->window, SW_SHOWNOACTIVATE);
+        }
         if (!host->IsOwnerCurrent())
         {
             host->focused = false;
@@ -1105,15 +1821,47 @@ bool ShowActivityOnUiThread(const Activity &activity)
             host->Hide();
             return false;
         }
+        if (activity.kind == 4)
+        {
+            // Ctrl+Z is a passive LiveSD command. Toggle a fixed English
+            // position and leave the key available to the host application.
+            if (!host->englishInputMode)
+                return host->visible && IsWindowVisible(host->window);
+            host->manualPositionPinned = !host->manualPositionPinned;
+            if (host->manualPositionPinned)
+            {
+                const auto pose = host->motion.Sample(NowMs());
+                host->manualScreenXDip = pose.xDip;
+                host->manualScreenYDip = pose.yDip;
+            }
+            else
+            {
+                host->manualScreenXDip.reset();
+                host->manualScreenYDip.reset();
+            }
+            return host->visible && IsWindowVisible(host->window);
+        }
         if (activity.kind == 1)
+        {
+            // A released English drag holds while idle. The next insertion
+            // resumes roaming from that position instead of pinning every
+            // animation frame to a zero-velocity manual anchor.
+            if (!host->pointerDown)
+            {
+                if (!host->englishInputMode)
+                    host->ReturnChineseToAnchor();
+                else if (!host->manualPositionPinned)
+                {
+                    host->manualScreenXDip.reset();
+                    host->manualScreenYDip.reset();
+                }
+            }
             host->motion.Pulse(NowMs(), activity.typingIntervalMs);
+        }
         else if (activity.kind == 3)
             host->motion.Enter(NowMs());
-        if (!host->visible)
-            return false;
-        return host->Render();
+        return host->visible && IsWindowVisible(host->window);
     }
-    const bool changed = !host->focused || host->client != activity.client || host->epoch != activity.epoch;
     host->client = activity.client;
     host->epoch = activity.epoch;
     if (changed)
@@ -1125,10 +1873,21 @@ bool ShowActivityOnUiThread(const Activity &activity)
     else if (activity.contextRootWindow)
         host->contextRootWindow = activity.contextRootWindow;
     host->focused = true;
+    // A delayed activity packet from this epoch must not roll back a newer
+    // authoritative StatusSnapshot. Activities seed mode only at focus entry.
+    if (changed)
+        host->englishInputMode = pendingInputModeState && pendingInputModeState->client == activity.client &&
+                                         pendingInputModeState->epoch == activity.epoch
+                                     ? pendingInputModeState->englishInputMode
+                                     : activity.englishInputMode;
     if (changed)
     {
         host->Hide();
         host->manualOrigin.reset();
+        host->manualScreenXDip.reset();
+        host->manualScreenYDip.reset();
+        host->manualDisplayBoundaryStage = false;
+        host->manualPositionPinned = false;
         host->hasCandidate = false;
         host->keepCandidateAnchor = false;
         host->candidateStageLeftOffsetDip.reset();
@@ -1141,7 +1900,7 @@ bool ShowActivityOnUiThread(const Activity &activity)
         host->candidateScale = candidateAnchor->scale;
         host->hasCandidate = true;
         host->keepCandidateAnchor = false;
-        host->motion.SetCandidateAnchorVisible(true);
+        host->motion.SetCandidateAnchorVisible(!host->englishInputMode);
     }
     host->RefreshConfig();
     if (!host->config || !host->EnsureWindow() || !host->IsOwnerCurrent())
@@ -1164,11 +1923,21 @@ bool ShowActivityOnUiThread(const Activity &activity)
         const int dy = activity.caret.y - host->lastFocusCaret.y;
         host->lastFocusCaret = activity.caret;
         const float scale = GetScaleForPoint(activity.caret);
-        if (!host->hasCandidate &&
+        if (!host->hasCandidate && !host->manualPositionPinned && !host->manualDisplayBoundaryStage &&
             (std::max)(std::abs(dx), std::abs(dy)) >= kTeleportDistanceDip * (scale > 0 ? scale : 1.0f))
         {
-            host->caret = activity.caret;
-            host->keepCandidateAnchor = false;
+            if (!host->englishInputMode && AnimationsEnabled())
+            {
+                // A first-key caret notification may precede the authoritative
+                // candidate layout. Coalesce them before starting a relocation.
+                host->pendingFocusCaret = activity.caret;
+                host->pendingFocusCaretDueMs = NowMs() + kFocusAnchorWaitMs;
+            }
+            else
+            {
+                host->caret = activity.caret;
+                host->keepCandidateAnchor = false;
+            }
         }
     }
     const bool showing = !host->visible || !IsWindowVisible(host->window);
@@ -1176,6 +1945,14 @@ bool ShowActivityOnUiThread(const Activity &activity)
     if (showing && AnimationsEnabled())
         host->BeginFadeIn(NowMs(), 0.0f);
     host->visible = true;
+    if (!showing && !changed && AnimationsEnabled())
+    {
+        // Per-key Focus packets can arrive alongside a TypingPulse and the
+        // candidate-anchor notification. The active frame clock already
+        // samples the newest pose and placement; a synchronous extra draw
+        // here would duplicate presentation for the same keystroke.
+        return true;
+    }
     // Draw before showing so no previous focus session flashes at the new anchor.
     if (!host->Render())
         return false;
@@ -1211,11 +1988,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
             host->dragging = false;
             host->pointerStart = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ClientToScreen(hwnd, &host->pointerStart);
+            host->pointerLast = host->pointerStart;
             host->dragOrigin = {host->placement->x, host->placement->y};
+            const auto grabbed = host->VisualPose(NowMs());
+            host->dragPoseStartXDip = grabbed.xDip;
+            host->dragPoseStartYDip = grabbed.yDip;
+            if (host->motion.DisplayBoundaryMode() && host->manualScreenXDip)
+                host->dragPoseStartXDip = *host->manualScreenXDip;
+            if (host->motion.DisplayBoundaryMode() && host->manualScreenYDip)
+                host->dragPoseStartYDip = *host->manualScreenYDip;
             if (host->clickUntilMs <= NowMs())
-                host->heldPose = host->motion.Sample(NowMs());
+                host->heldPose = grabbed;
+            if (host->motion.DisplayBoundaryMode() && host->manualScreenXDip)
+                host->heldPose.xDip = *host->manualScreenXDip;
+            if (host->motion.DisplayBoundaryMode() && host->manualScreenYDip)
+                host->heldPose.yDip = *host->manualScreenYDip;
             SetCapture(hwnd);
-            SetTimer(hwnd, kPointerTimer, 16, nullptr);
+            // WM_TIMER has a 10 ms platform minimum; the high-resolution frame
+            // scheduler below also polls the pointer on each active tick.
+            SetTimer(hwnd, kPointerTimer, 10, nullptr);
+            host->ScheduleFrameAt(Clock::now() + kActiveFrameInterval);
         }
         return 0;
     case WM_MOUSEMOVE:
@@ -1223,8 +2015,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
         {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ClientToScreen(hwnd, &point);
-            if (host->MovePointer(point))
-                host->Render();
+            host->MovePointer(point);
         }
         return 0;
     case WM_LBUTTONUP:
@@ -1236,21 +2027,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
         }
         return 0;
     case WM_CAPTURECHANGED:
-    case WM_CANCELMODE:
+    case WM_CANCELMODE: {
+        const bool restoreHitRegion = host->dragHitRegionRelaxed;
         host->CancelPointer();
+        if (restoreHitRegion && host->visible)
+            host->Render();
+    }
         return 0;
     case WM_ERASEBKGND:
         return 1;
     case WM_PAINT: {
         PAINTSTRUCT paint{};
         BeginPaint(hwnd, &paint);
-        host->Render();
+        if (!(host->pointerDown && host->dragging))
+            host->Render();
         EndPaint(hwnd, &paint);
         return 0;
     }
     case kFrameMessage:
         if (host->scheduler.ConsumeMessage(wParam, lParam))
+        {
+            RecordFrameWake(host->frameDeadline.value_or(Clock::now()));
+            if (host->pointerDown)
+                host->PollPointer();
             host->Render();
+        }
         return 0;
     case WM_TIMER:
         if (wParam == kPointerTimer)
@@ -1261,6 +2062,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
         if (wParam == kFrameTimer)
         {
             KillTimer(hwnd, kFrameTimer);
+            RecordFrameWake(host->frameDeadline.value_or(Clock::now()));
             host->Render();
         }
         return 0;
@@ -1294,6 +2096,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
         host->candidateContentResizedRequest = false;
         host->placementFade = Host::PlacementFade::None;
         host->transparentPlacementPresented = false;
+        host->revealAfterPresent = false;
         host->renderScale = 0.0f;
         host->visible = false;
         host->window = nullptr;
@@ -1344,6 +2147,41 @@ void PostActivity(const Activity &activity)
         delete copy;
 }
 
+void PostInputModeState(std::uint64_t client, std::uint64_t epoch, bool englishInputMode)
+{
+    const std::lock_guard lock(postMutex);
+    if (!acceptingActivity || !::global_hwnd || client == 0 || epoch == 0)
+        return;
+    auto *update = new (std::nothrow) InputModeUpdate{client, epoch, englishInputMode};
+    if (update && !PostMessageW(::global_hwnd, kInputModeMessage, 0, reinterpret_cast<LPARAM>(update)))
+        delete update;
+}
+
+bool HandleInputModeStateMessage(LPARAM payload)
+{
+    const std::unique_ptr<InputModeUpdate> update(reinterpret_cast<InputModeUpdate *>(payload));
+    if (!update || !IsPipeActivationCurrent(update->client, update->epoch))
+        return false;
+    pendingInputModeState = *update;
+    if (!host || !host->focused || host->client != update->client || host->epoch != update->epoch ||
+        host->englishInputMode == update->englishInputMode)
+        return true;
+    host->CancelPointer();
+    host->englishInputMode = update->englishInputMode;
+    host->manualOrigin.reset();
+    host->manualScreenXDip.reset();
+    host->manualScreenYDip.reset();
+    host->manualDisplayBoundaryStage = false;
+    host->chineseAnchoredOnDisplay = false;
+    host->chineseReturn.reset();
+    host->manualPositionPinned = false;
+    host->pendingFocusCaret.reset();
+    host->awaitingCandidateAfterCaret = false;
+    host->Place();
+    host->Render();
+    return true;
+}
+
 bool HandleActivityMessage(LPARAM payload)
 {
     const std::unique_ptr<Activity> activity(reinterpret_cast<Activity *>(payload));
@@ -1363,6 +2201,23 @@ bool HandleActivityMessage(LPARAM payload)
     }
     if (!IsPipeActivationCurrent(activity->client, activity->epoch))
         return false;
+    if (activity->kind == FanyImeLiveSDActivity::ComboTyping || activity->kind == FanyImeLiveSDActivity::ComboReset)
+    {
+        // Ordered, caret-independent decoration events arrive before the
+        // delayed movement batch. Retain the first character even when no
+        // companion HWND exists, and reset regardless of Enter arbitration.
+        if (activity->kind == FanyImeLiveSDActivity::ComboTyping)
+            comboCounter.Increment(NowMs());
+        else
+            comboCounter.Reset(NowMs());
+        if (host)
+        {
+            host->hitRegionNeedsRefresh = true;
+            if (host->visible && !AnimationsEnabled())
+                host->Render();
+        }
+        return true;
+    }
     if (activity->kind == 2)
     {
         if (host)
@@ -1402,9 +2257,21 @@ void SetCandidateAnchor(const RECT &cardPixels, float scale)
         return;
     }
     const bool candidateAppeared = !host->hasCandidate;
-    const bool returnDraggedToCandidate = candidateAppeared && host->manualOrigin.has_value();
-    if (returnDraggedToCandidate)
-        host->manualOrigin.reset();
+    host->pendingFocusCaret.reset();
+    if (candidateAppeared && host->awaitingCandidateAfterCaret)
+    {
+        // Some editors publish the first card after the caret grace period.
+        // Replace an in-flight speculative relocation with continuous card
+        // following instead of completing a stale fade-out/fade-in first.
+        const double nowMs = NowMs();
+        const float opacity = host->PlacementOpacity(nowMs);
+        host->pendingPlacement.reset();
+        host->placementFade = Host::PlacementFade::None;
+        host->transparentPlacementPresented = false;
+        if (AnimationsEnabled() && opacity < 1.0f)
+            host->BeginFadeIn(nowMs, opacity);
+    }
+    host->awaitingCandidateAfterCaret = false;
     if (candidateAppeared)
         host->candidateStageLeftOffsetDip.reset();
     const int oldWidth = host->candidate.right - host->candidate.left;
@@ -1416,11 +2283,16 @@ void SetCandidateAnchor(const RECT &cardPixels, float scale)
     host->candidateScale = scale > 0 ? scale : 1.0f;
     host->hasCandidate = true;
     host->keepCandidateAnchor = false;
-    host->motion.SetCandidateAnchorVisible(true);
+    host->motion.SetCandidateAnchorVisible(!host->englishInputMode);
     host->contextRootWindow = contextRootWindow;
     host->smoothCandidatePlacementRequest = true;
-    host->Place(true, returnDraggedToCandidate ? kDragReturnMs : kCandidateFollowMs, returnDraggedToCandidate);
-    host->Render();
+    host->ReturnChineseToAnchor();
+    host->Place(true, kCandidateFollowMs, candidateAppeared);
+    // Candidate layout can report several times while the first characters
+    // resize the row. The existing frame clock already samples the newest
+    // anchor; avoid an extra synchronous D2D present per layout notification.
+    if (!host->visible || !IsWindowVisible(host->window) || !AnimationsEnabled())
+        host->Render();
 }
 
 void ClearCandidateAnchor()
@@ -1431,6 +2303,11 @@ void ClearCandidateAnchor()
     host->hasCandidate = false;
     host->keepCandidateAnchor = true;
     host->motion.SetCandidateAnchorVisible(false);
+    if (host->englishInputMode)
+    {
+        host->Place();
+        host->Render();
+    }
 }
 
 void SyncTopmost()
@@ -1439,11 +2316,45 @@ void SyncTopmost()
         SetWindowPos(host->window, ::global_hwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
+FrameTimingTelemetry GetFrameTimingTelemetry()
+{
+    FrameTimingTelemetry result;
+    result.scheduled = scheduledFrameWakes.load(std::memory_order_relaxed);
+    result.rendered = renderedFrames.load(std::memory_order_relaxed);
+    result.missed = missedFrameSlots.load(std::memory_order_relaxed);
+    result.maxLatenessNs = maximumFrameLatenessNs.load(std::memory_order_relaxed);
+    result.maxRenderDurationNs = maximumRenderDurationNs.load(std::memory_order_relaxed);
+    result.highResolutionTimer = host && host->scheduler.IsHighResolution();
+    result.timerResolutionRaised = false;
+    result.waitableTimer = host && host->frameWaitableTimer;
+    const auto intervalCount = frameWakeIntervalCount.load(std::memory_order_relaxed);
+    result.intervalTotalCount = intervalCount;
+    result.intervalSampleCount = (std::min)(intervalCount, static_cast<std::uint64_t>(result.intervalSamplesNs.size()));
+    const auto firstInterval = intervalCount - result.intervalSampleCount;
+    for (std::uint64_t index = 0; index < result.intervalSampleCount; ++index)
+    {
+        const auto slot = (firstInterval + index) % frameWakeIntervalsNs.size();
+        result.intervalSamplesNs[index] = frameWakeIntervalsNs[slot].load(std::memory_order_relaxed);
+    }
+    const auto durationCount = renderDurationCount.load(std::memory_order_relaxed);
+    result.renderDurationTotalCount = durationCount;
+    result.renderDurationSampleCount =
+        (std::min)(durationCount, static_cast<std::uint64_t>(result.renderDurationsNs.size()));
+    const auto firstDuration = durationCount - result.renderDurationSampleCount;
+    for (std::uint64_t index = 0; index < result.renderDurationSampleCount; ++index)
+    {
+        const auto slot = (firstDuration + index) % renderDurationsNs.size();
+        result.renderDurationsNs[index] = renderDurationsNs[slot].load(std::memory_order_relaxed);
+    }
+    return result;
+}
+
 void Shutdown()
 {
     const std::lock_guard lock(postMutex);
     acceptingActivity = false;
     candidateAnchor.reset();
+    pendingInputModeState.reset();
     if (host)
     {
         host->Hide();
@@ -1454,5 +2365,7 @@ void Shutdown()
     MSG pending{};
     while (PeekMessageW(&pending, ::global_hwnd, kActivityMessage, kActivityMessage, PM_REMOVE))
         delete reinterpret_cast<Activity *>(pending.lParam);
+    while (PeekMessageW(&pending, ::global_hwnd, kInputModeMessage, kInputModeMessage, PM_REMOVE))
+        delete reinterpret_cast<InputModeUpdate *>(pending.lParam);
 }
 } // namespace LiveSDHost

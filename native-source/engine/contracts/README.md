@@ -32,11 +32,30 @@ Existing DLLs with unversioned hello remain accepted by the new Server using the
 Append opcodes; never change released values or reuse them. An incompatible layout needs a new major protocol and an explicit migration, not another copy of a header. Minor additions must be optional capabilities.
 
 `LiveSDActivity` is optional (capability bit 9, Main event 18). Its `keycode` is a
-numeric kind: 0 focused caret update, 1 typing pulse, 2 blur. `point[]` carries a
+numeric kind: 0 focused caret update, 1 typing pulse, 2 blur, 3 Enter action,
+4 toggle English LiveSD position pin. Kind 4 additionally requires the optional
+`LiveSDPinPosition` capability (bit 11). A client must not send kind 4 to a peer
+that did not negotiate this bit: earlier LiveSD Servers reject unknown kinds
+and close the Main connection. A new Server ignores an unnegotiated position
+toggle. The base capability alone continues to allow kinds 0 through 3.
+Kinds 5 (`ComboTyping`) and 6 (`ComboReset`) additionally require optional
+`LiveSDCombo` (bit 12). They carry no text and allow the canonical unresolved
+caret sentinel `{0, -100000}` with a zero `request_id`. `ComboTyping` increments
+the decoration count once per observed character-key event; Backspace and Enter
+send `ComboReset`. The DLL sends these after physical-key callback deduplication,
+in observed order, independently of the asynchronous caret/motion batches. This
+preserves `character -> Enter -> character` even within one motion batch. These
+events neither represent committed-text length nor alter input handling. Old
+peers never receive them; the Server ignores unnegotiated kinds. Like other
+optional LiveSD events, transport remains best effort and never blocks text input.
+`point[]` carries a
 resolved physical caret anchor for kind 0. A kind-1 typing pulse may carry either
 that resolved anchor or `{0, -100000}` when the current focus session is valid but
 the editor did not expose a caret; the latter only animates the Server's existing
-host and must not create or reposition one. Blur uses `{0, -100000}`. For kinds
+host and must not create or reposition one. Enter and position pin may use the
+same sentinel and only affect an existing focused host. Position pin never
+changes text or consumes the application's Ctrl+Z shortcut; repeated physical
+key-down events must not toggle it again. Blur uses `{0, -100000}`. For kinds
 0/1, `request_id` carries the root-owner HWND of the focused TSF context when
 available (zero otherwise); a no-caret pulse and blur use zero. The Server
 compares this window with the foreground window so TIPs hosted by a proxy process

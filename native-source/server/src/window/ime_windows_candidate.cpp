@@ -119,6 +119,11 @@ LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARA
         LiveSDHost::HandleActivityMessage(lParam);
         return 0;
     }
+    if (message == LiveSDHost::kInputModeMessage)
+    {
+        LiveSDHost::HandleInputModeStateMessage(lParam);
+        return 0;
+    }
     if (message == WM_POWERBROADCAST || message == WM_DISPLAYCHANGE || message == WM_DWMCOMPOSITIONCHANGED ||
         message == WM_SETTINGCHANGE)
     {
@@ -202,7 +207,21 @@ LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARA
                        GetConfiguredCandidateWindowFollowCursor(), g_candidate_session_anchor_valid,
                        DescribeCandidateHostState());
         EnsureSmallWindowsTopmost(L"show-candidate");
-        const POINT layoutCaret = GetCandidateLayoutCaret();
+        const bool forceLayout = g_candidate_force_layout.exchange(false);
+        const POINT reportedCaret = GetCandidateLayoutCaret();
+        POINT layoutCaret = reportedCaret;
+        // MoveCandidate already keeps a visible horizontal candidate row
+        // anchored while text advances. ShowCandidate arrives on each new
+        // preedit, so it must use the same rule; otherwise that path bypasses
+        // the settle policy and moves the entire card (including its static
+        // right-side portrait) with every glyph.
+        if (!forceLayout && ::is_global_wnd_cand_shown && IsCandidateHostPaintedVisible(hwnd) &&
+            !CandidateCaretNeedsStableFollow(hwnd, reportedCaret))
+        {
+            layoutCaret = {g_last_placed_caret_x, g_last_placed_caret_y};
+            CAND_DIAG_LOGF(L"candidate-frame show retained same-line anchor=({},{}) reported=({},{})", layoutCaret.x,
+                           layoutCaret.y, reportedCaret.x, reportedCaret.y);
+        }
         const bool showPreedit = GetConfiguredCandidateWindowPreeditStyle() != "empty";
         const std::wstring preedit = GetPreeditWithCaretMarker();
         // Suppress a repaint that would reproduce the frame already on screen.
@@ -213,8 +232,7 @@ LRESULT CALLBACK WndProcCandWindow(HWND hwnd, UINT message, WPARAM wParam, LPARA
                                                 candidatePage->has_previous_page, candidatePage->has_next_page};
         const std::wstring frameSignature = CandidateFrameSignature(signaturePreedit, candidatePage->page_views,
                                                                     layoutCaret.x, layoutCaret.y, pageState);
-        if (::is_global_wnd_cand_shown && !g_candidate_force_layout.load() &&
-            frameSignature == g_last_rendered_candidate_signature &&
+        if (::is_global_wnd_cand_shown && !forceLayout && frameSignature == g_last_rendered_candidate_signature &&
             updateStartedTick - g_last_rendered_candidate_tick < kCandidateShowDedupWindowMs)
         {
             // The frame already on screen is identical to the page just loaded, so the render echo is

@@ -419,9 +419,9 @@ autocorrect_marker = true
 # 快捷键
 #
 [keybindings]
-# 中英文切换快捷键（Ctrl+Space 由 Windows 系统管理，此处不控制）
-switch_language_shift = true
-switch_language_ctrl = false
+# 中英文切换快捷键（默认 Ctrl；Ctrl+Space 由 Windows 系统管理，此处不控制）
+switch_language_shift = false
+switch_language_ctrl = true
 switch_language_ctrl_alt_space = true
 # 输入状态切换；空字符串表示未绑定；支持 Ctrl 或 Ctrl+Shift 组合键
 toggle_english_candidates = "Ctrl+Shift+KeyE"

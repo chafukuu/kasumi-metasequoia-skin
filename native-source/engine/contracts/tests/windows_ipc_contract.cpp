@@ -39,6 +39,8 @@ int main()
     CHECK(FanyImeProtocol::LiveSDActivity == (1u << 9));
     CHECK((FanyImeProtocol::LiveSDActivity & FanyImeProtocol::RequiredCapabilities) == 0);
     CHECK(FanyImeProtocol::LiveSDTypingCadence == (1u << 10));
+    CHECK(FanyImeProtocol::LiveSDPinPosition == (1u << 11));
+    CHECK((FanyImeProtocol::LiveSDPinPosition & FanyImeProtocol::RequiredCapabilities) == 0);
     CHECK(FanyImeLiveSDActivity::MaximumTypingIntervalMs == 5000);
     const auto liveSDCapabilities =
         FanyImeProtocol::Capabilities | FanyImeProtocol::LiveSDActivity | FanyImeProtocol::LiveSDTypingCadence;
@@ -55,12 +57,52 @@ int main()
     CHECK((FanyImeProtocol::Negotiate(FanyImeProtocol::Hello(7, 126), liveSDCapabilities).capabilities &
            FanyImeProtocol::LiveSDActivity) == 0);
     CHECK(FanyImeLiveSDActivity::Focus == 0 && FanyImeLiveSDActivity::TypingPulse == 1 &&
-          FanyImeLiveSDActivity::Blur == 2 && FanyImeLiveSDActivity::EnterAction == 3);
+          FanyImeLiveSDActivity::Blur == 2 && FanyImeLiveSDActivity::EnterAction == 3 &&
+          FanyImeLiveSDActivity::PinPosition == 4);
     CHECK(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Focus));
     CHECK(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::TypingPulse));
     CHECK(!FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::Blur));
     CHECK(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::EnterAction));
-    CHECK(FanyImeLiveSDActivity::IsKnownKind(3) && !FanyImeLiveSDActivity::IsKnownKind(4));
+    CHECK(FanyImeLiveSDActivity::AllowsMissingCaret(FanyImeLiveSDActivity::PinPosition));
+    CHECK(FanyImeLiveSDActivity::IsKnownKind(6) && !FanyImeLiveSDActivity::IsKnownKind(7));
+    const auto pinCapabilities = liveSDCapabilities | FanyImeProtocol::LiveSDPinPosition;
+    const auto pinHello = FanyImeProtocol::Hello(7, 128, pinCapabilities);
+    const auto newClientOldServer = FanyImeProtocol::Negotiate(pinHello, liveSDCapabilities);
+    const auto oldClientNewServer = FanyImeProtocol::Negotiate(liveSDHello, pinCapabilities);
+    const auto newClientNewServer = FanyImeProtocol::Negotiate(pinHello, pinCapabilities);
+    CHECK(newClientOldServer.accepted && oldClientNewServer.accepted && newClientNewServer.accepted);
+    for (const auto kind : {FanyImeLiveSDActivity::Focus, FanyImeLiveSDActivity::TypingPulse,
+                            FanyImeLiveSDActivity::Blur, FanyImeLiveSDActivity::EnterAction})
+    {
+        CHECK(FanyImeProtocol::AllowsLiveSDActivityKind(newClientOldServer.capabilities, kind));
+        CHECK(FanyImeProtocol::AllowsLiveSDActivityKind(oldClientNewServer.capabilities, kind));
+    }
+    CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(newClientOldServer.capabilities,
+                                                     FanyImeLiveSDActivity::PinPosition));
+    CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(oldClientNewServer.capabilities,
+                                                     FanyImeLiveSDActivity::PinPosition));
+    CHECK(
+        FanyImeProtocol::AllowsLiveSDActivityKind(newClientNewServer.capabilities, FanyImeLiveSDActivity::PinPosition));
+    CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(FanyImeProtocol::LiveSDPinPosition,
+                                                     FanyImeLiveSDActivity::PinPosition));
+    CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(pinCapabilities, 5));
+    CHECK(FanyImeProtocol::LiveSDCombo == (1u << 12));
+    CHECK(FanyImeLiveSDActivity::ComboTyping == 5 && FanyImeLiveSDActivity::ComboReset == 6);
+    const auto comboCapabilities = pinCapabilities | FanyImeProtocol::LiveSDCombo;
+    const auto comboHello = FanyImeProtocol::Hello(7, 129, comboCapabilities);
+    const auto comboNewOld = FanyImeProtocol::Negotiate(comboHello, pinCapabilities);
+    const auto comboOldNew = FanyImeProtocol::Negotiate(pinHello, comboCapabilities);
+    const auto comboNewNew = FanyImeProtocol::Negotiate(comboHello, comboCapabilities);
+    CHECK(comboNewOld.accepted && comboOldNew.accepted && comboNewNew.accepted);
+    for (const auto kind : {FanyImeLiveSDActivity::ComboTyping, FanyImeLiveSDActivity::ComboReset})
+    {
+        CHECK(FanyImeLiveSDActivity::AllowsMissingCaret(kind));
+        CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(comboNewOld.capabilities, kind));
+        CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(comboOldNew.capabilities, kind));
+        CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(FanyImeProtocol::LiveSDCombo, kind));
+        CHECK(FanyImeProtocol::AllowsLiveSDActivityKind(comboNewNew.capabilities, kind));
+    }
+    CHECK(!FanyImeProtocol::AllowsLiveSDActivityKind(comboCapabilities, 7));
     CHECK(FanyImeProtocol::InputStateShortcuts == (1u << 7));
     CHECK(FanyImeProtocol::TemporaryJapaneseLongVowel == (1u << 8));
     const auto rCapabilities = FanyImeProtocol::Capabilities | FanyImeProtocol::TemporaryJapaneseLongVowel;

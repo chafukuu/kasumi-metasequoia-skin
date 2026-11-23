@@ -412,6 +412,33 @@ ID2D1Bitmap *DeviceResources::GetImageFrame(const std::wstring &filePath, D2D1_S
     return entry->frames[(std::min)(sample.frameIndex, entry->frames.size() - 1)].Get();
 }
 
+
+ID2D1Bitmap *DeviceResources::GetImageFrameBlend(const std::wstring &filePath, ID2D1Bitmap **next, float *mix)
+{
+    if (next)
+        *next = nullptr;
+    if (mix)
+        *mix = 0.0f;
+    ID2D1Bitmap *current = GetImageFrame(filePath);
+    if (!current || !animationsEnabled_ || !next || !mix)
+        return current;
+    AnimatedBitmapEntry *entry = FindOrLoadAnimation(filePath);
+    if (!entry || entry->frames.size() < 2)
+        return current;
+    const auto now = frameTime_.value_or(AnimationClock::now());
+    const double elapsed = (std::max)(0.0, std::chrono::duration<double, std::milli>(now - animationEpoch_).count());
+    const auto sample = entry->timeline.SampleAt(static_cast<uint64_t>(elapsed));
+    if (!sample.nextChangeMs || sample.frameIndex >= entry->timeline.frameDelaysMs.size())
+        return current;
+    const double duration = static_cast<double>(entry->timeline.frameDelaysMs[sample.frameIndex]);
+    if (duration <= 0.0)
+        return current;
+    *next = entry->frames[(sample.frameIndex + 1) % entry->frames.size()].Get();
+    *mix = static_cast<float>(std::clamp((elapsed - (static_cast<double>(*sample.nextChangeMs) - duration)) / duration,
+                                         0.0, 1.0));
+    return current;
+}
+
 void DeviceResources::TrimBrushCache()
 {
     if (brushCache_.size() <= kBrushCacheSoftLimit)

@@ -51,8 +51,8 @@ std::string g_japanese_schema = "romaji";
 std::string g_character_set = "simplified";
 std::string g_default_ime_mode = "chinese";
 std::string g_ime_mode_scope = "app";
-bool g_switch_language_shift_enabled = true;
-bool g_switch_language_ctrl_enabled = false;
+bool g_switch_language_shift_enabled = false;
+bool g_switch_language_ctrl_enabled = true;
 bool g_switch_language_ctrl_alt_space_enabled = true;
 bool g_character_set_shortcut_enabled = true;
 InputStateShortcutValues g_input_state_shortcuts = [] {
@@ -714,11 +714,13 @@ bool LoadImeConfig()
         {
             // Prefer explicit bool keys; fall back to legacy switch_language array.
             const auto legacy = tbl["keybindings"]["switch_language"].as_array();
-            bool legacy_shift = true;
+            bool legacy_shift = false;
+            bool legacy_ctrl = false;
             bool legacy_ctrl_alt_space = true;
             if (legacy)
             {
                 legacy_shift = false;
+                legacy_ctrl = false;
                 legacy_ctrl_alt_space = false;
                 for (const auto &item : *legacy)
                 {
@@ -727,12 +729,15 @@ bool LoadImeConfig()
                         continue;
                     if (*value == "Shift")
                         legacy_shift = true;
+                    else if (*value == "Ctrl")
+                        legacy_ctrl = true;
                     else if (*value == "Ctrl+Alt+Space" || *value == "Ctrl+Space")
                         legacy_ctrl_alt_space = true;
                 }
             }
             g_switch_language_shift_enabled = tbl["keybindings"]["switch_language_shift"].value_or(legacy_shift);
-            g_switch_language_ctrl_enabled = tbl["keybindings"]["switch_language_ctrl"].value_or(false);
+            g_switch_language_ctrl_enabled =
+                tbl["keybindings"]["switch_language_ctrl"].value_or(legacy ? legacy_ctrl : true);
             g_switch_language_ctrl_alt_space_enabled =
                 tbl["keybindings"]["switch_language_ctrl_alt_space"].value_or(legacy_ctrl_alt_space);
             g_character_set_shortcut_enabled = tbl["keybindings"]["toggle_character_set_ctrl_shift_f"].value_or(true);

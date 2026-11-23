@@ -1,8 +1,12 @@
-# 户山香香澄 · 水杉输入法皮肤
+# 户山香澄 · 水杉输入法
 
-适配水杉输入法 Windows v0.11.1 的自定义原生皮肤。当前皮肤版本为 **v0.5.7**，加入实时 LiveSD 小人与候选框定位、舞台跟随修正，仍作为早期预览发布。
+**[下载 Windows x64 一体离线安装包（约 135 MiB）](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/download/kasumi-20261123/Kasumi-IME-20261123-Windows-x64-Offline.exe)**
 
-**[下载 Windows x64 安装包](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/tag/v0.5.7)** · **[下载与使用说明](docs/下载与使用.md)** · **[星星参数与图片接口](docs/星星参数与图片接口.md)** · **[开发与构建](docs/开发与构建.md)**
+2026-11-23 版集成水杉输入法、香澄 LiveSD、COMBO、数学符号词库和所需运行库。下载一个 EXE 即可安装。[安装步骤](docs/离线安装.md) · [数学符号词表](native-source/scripts/dictionary_build/math_symbols.tsv)
+
+## 历史版本 v0.5.7
+
+[旧版增量皮肤包](https://github.com/chafukuu/kasumi-metasequoia-skin/releases/tag/v0.5.7)。下列安装和验收记录对应 v0.5.7。
 
 ## 当前效果
 

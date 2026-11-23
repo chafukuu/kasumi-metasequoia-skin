@@ -8,6 +8,7 @@
 #include "Define.h"
 #include "Globals.h"
 #include "FanyUtils.h"
+#include "SwitchLanguageHotkeys.h"
 #include "Ipc.h"
 #include "VimMode.h"
 #include <utf8cpp/utf8.h>
@@ -439,12 +440,12 @@ SwitchLanguageHotkeys ParseSwitchLanguageHotkeys(const std::filesystem::path &co
         const std::string raw = line.substr(eq + 1);
         if (key == "switch_language_shift")
         {
-            result.shift = ParseTomlBool(raw, true);
+            result.shift = ParseTomlBool(raw, false);
             sawShift = true;
         }
         else if (key == "switch_language_ctrl")
         {
-            result.ctrl = ParseTomlBool(raw, false);
+            result.ctrl = ParseTomlBool(raw, true);
             sawCtrl = true;
         }
         else if (key == "switch_language_ctrl_alt_space")
@@ -456,12 +457,17 @@ SwitchLanguageHotkeys ParseSwitchLanguageHotkeys(const std::filesystem::path &co
         {
             result.character_set_ctrl_shift_f = ParseTomlBool(raw, true);
         }
-        else if (key == "switch_language" && !sawShift && !sawCtrlAltSpace)
+        else if (key == "switch_language")
         {
             // Legacy array: switch_language = ["Ctrl+Space", "Shift"]
-            result.shift = raw.find("Shift") != std::string::npos;
-            result.ctrl_alt_space =
-                raw.find("Ctrl+Alt+Space") != std::string::npos || raw.find("Ctrl+Space") != std::string::npos;
+            // Explicit boolean keys win independently of their file order.
+            const auto legacy = FanyImeSwitchLanguageHotkeys::ParseLegacyArray(raw);
+            if (!sawShift)
+                result.shift = legacy.shift;
+            if (!sawCtrl)
+                result.ctrl = legacy.ctrl;
+            if (!sawCtrlAltSpace)
+                result.ctrl_alt_space = legacy.ctrlAltSpace;
         }
         for (std::size_t i = 0; i < values.size(); ++i)
             if (key == FanyImeInputStateShortcuts::Definitions[i].key)
@@ -471,7 +477,6 @@ SwitchLanguageHotkeys ParseSwitchLanguageHotkeys(const std::filesystem::path &co
             }
     }
     result.input_state = FanyImeInputStateShortcuts::Resolve(values);
-    (void)sawCtrl;
     return result;
 }
 

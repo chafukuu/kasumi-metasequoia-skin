@@ -1,0 +1,89 @@
+分类	分类码	符号	名称	输入码
+集合论	jihelun	∈	属于	shuyu
+集合论	jihelun	∉	不属于	bushuyu
+集合论	jihelun	∅	空集	kongji
+集合论	jihelun	∩	交集	jiaoji
+集合论	jihelun	∪	并集	bingji
+集合论	jihelun	∖	差集 集合差	chaji jihecha
+集合论	jihelun	∁	补集	buji
+集合论	jihelun	△	对称差	duichencha
+集合论	jihelun	⊆	子集 包含于	ziji baohanyu
+集合论	jihelun	⊊	真子集 真包含于	zhenziji zhenbaohanyu
+集合论	jihelun	⊂	真包含于	zhenbaohanyu
+集合论	jihelun	⊇	超集 包含	chaoji baohan
+集合论	jihelun	⊋	真超集 真包含	zhenchaoji zhenbaohan
+集合论	jihelun	⊃	真包含	zhenbaohan
+集合论	jihelun	⊈	非子集 不包含于	feiziji bubaohanyu
+集合论	jihelun	⊉	非超集 不包含	feichaoji bubaohan
+集合论	jihelun	∋	含有元素	hanyouyuansu
+集合论	jihelun	∌	不含有元素	buhanyouyuansu
+集合论	jihelun	×	笛卡尔积 直积	dikaerji zhiji
+集合论	jihelun	℘	幂集	miji
+集合论	jihelun	⋂	广义交集	guangyijiaoji
+集合论	jihelun	⋃	广义并集	guangyibingji
+集合论	jihelun	ℕ	自然数集	ziranshuji
+集合论	jihelun	ℤ	整数集	zhengshuji
+集合论	jihelun	ℚ	有理数集	youlishuji
+集合论	jihelun	ℝ	实数集	shishuji
+集合论	jihelun	ℂ	复数集	fushuji
+算术	suanshu	+	加号 加法	jiahao jiafa
+算术	suanshu	−	减号 减法 负号	jianhao jianfa fuhao
+算术	suanshu	×	乘号 乘法	chenghao chengfa
+算术	suanshu	÷	除号 除法	chuhao chufa
+算术	suanshu	±	正负号 正负	zhengfuhao zhengfu
+算术	suanshu	∓	负正号 负正	fuzhenghao fuzheng
+算术	suanshu	⋅	点乘 乘点	diancheng chengdian
+算术	suanshu	√	根号 平方根	genhao pingfanggen
+算术	suanshu	∛	立方根 三次根号	lifanggen sancigenhao
+算术	suanshu	∜	四次根号	sicigenhao
+算术	suanshu	²	平方 二次方	pingfang ercifang
+算术	suanshu	³	立方 三次方	lifang sancifang
+算术	suanshu	^	乘方符号 幂运算符	chengfangfuhao miyunsuanfu
+算术	suanshu	!	阶乘	jiecheng
+算术	suanshu	%	百分号	baifenhao
+算术	suanshu	‰	千分号	qianfenhao
+算术	suanshu	∣	整除	zhengchu
+算术	suanshu	∤	不整除	buzhengchu
+比较关系	bijiaoguanxi	=	等于 等号	dengyu denghao
+比较关系	bijiaoguanxi	≠	不等于 不等号	budengyu budenghao
+比较关系	bijiaoguanxi	<	小于 小于号	xiaoyu xiaoyuhao
+比较关系	bijiaoguanxi	>	大于 大于号	dayu dayuhao
+比较关系	bijiaoguanxi	≤	小于等于 小于或等于	xiaoyudengyu xiaoyuhuodengyu
+比较关系	bijiaoguanxi	≥	大于等于 大于或等于	dayudengyu dayuhuodengyu
+比较关系	bijiaoguanxi	≈	约等于 近似等于	yuedengyu jinsidengyu
+比较关系	bijiaoguanxi	≡	恒等于 同余	hengdengyu tongyu
+比较关系	bijiaoguanxi	∝	正比于 成正比	zhengbiyu chengzhengbi
+比较关系	bijiaoguanxi	≪	远小于	yuanxiaoyu
+比较关系	bijiaoguanxi	≫	远大于	yuandayu
+逻辑	luoji	∀	任意 全称量词	renyi quanchengliangci
+逻辑	luoji	∃	存在 存在量词	cunzai cunzailiangci
+逻辑	luoji	∄	不存在	bucunzai
+逻辑	luoji	¬	逻辑非 否定	luojifei fouding
+逻辑	luoji	∧	逻辑与 合取	luojiyu hequ
+逻辑	luoji	∨	逻辑或 析取	luojihuo xiqu
+逻辑	luoji	⊕	异或	yihuo
+逻辑	luoji	⇒	推出 蕴含	tuichu yunhan
+逻辑	luoji	⇔	当且仅当 逻辑等价	dangqiejindang luojidengjia
+逻辑	luoji	∵	因为	yinwei
+逻辑	luoji	∴	所以	suoyi
+微积分	weijifen	∫	积分 积分号	jifen jifenhao
+微积分	weijifen	∬	二重积分	erchongjifen
+微积分	weijifen	∭	三重积分	sanchongjifen
+微积分	weijifen	∮	环路积分 围道积分	huanlujifen weidaojifen
+微积分	weijifen	∂	偏导 偏导数	piandao piandaoshu
+微积分	weijifen	∇	梯度 梯度算子	tidu tidusuanzi
+微积分	weijifen	∑	求和 求和号	qiuhe qiuhehao
+微积分	weijifen	∏	连乘 连乘号	liancheng lianchenghao
+微积分	weijifen	∞	无穷 无穷大 无限大	wuqiong wuqiongda wuxianda
+微积分	weijifen	′	一阶导数符号	yijiedaoshufuhao
+微积分	weijifen	″	二阶导数符号	erjiedaoshufuhao
+几何	jihe	∠	角 角号	jiao jiaohao
+几何	jihe	∟	直角	zhijiao
+几何	jihe	⊥	垂直 垂直于	chuizhi chuizhiyu
+几何	jihe	∥	平行 平行于	pingxing pingxingyu
+几何	jihe	△	三角形	sanjiaoxing
+几何	jihe	≌	全等 全等于	quandeng quandengyu
+几何	jihe	∽	相似 相似于	xiangsi xiangsiyu
+几何	jihe	°	度数 角度符号	dushu jiaodufuhao
+几何	jihe	π	圆周率	yuanzhoulv
+几何	jihe	⌒	圆弧 弧号	yuanhu huhao

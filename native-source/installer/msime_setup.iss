@@ -1,4 +1,4 @@
-; Metasequoia IME — Inno Setup script
+﻿; Metasequoia IME — Inno Setup script
 ; 源文件根目录：本脚本所在目录
 ;
 ; 编译方法：
@@ -19,7 +19,11 @@
 ; 本仓库不包含任何预置代码签名证书。
 
 #define MyAppName      "Metasequoia IME 水杉输入法"
+#ifdef KasumiOffline
+#define MyAppVersion   "0.11.2"
+#else
 #define MyAppVersion   "0.0.1"
+#endif
 #define MyAppPublisher "Metasequoia"
 #define MyAppExeName   "MetasequoiaImeServer.exe"
 #define MySettingsExeName "MetasequoiaImeSettings.exe"
@@ -47,7 +51,11 @@
 
 [Setup]
 AppId={{A7C3E91F-4B2D-4E8A-9F1C-6D5E8B0A2C4D}
+#ifdef KasumiOffline
+AppName=香澄输入法 · Kasumi IME
+#else
 AppName={#MyAppName}
+#endif
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\metasequoiaime
@@ -57,7 +65,11 @@ DisableDirPage=yes
 AlwaysShowDirOnReadyPage=yes
 DisableProgramGroupPage=yes
 OutputDir=Output
+#ifdef KasumiOffline
+OutputBaseFilename=Kasumi-IME-20261123-Windows-x64-Offline
+#else
 OutputBaseFilename=MetasequoiaIME_Setup_v{#MyAppVersion}{#MyOutputSuffix}
+#endif
 SetupIconFile={#MySourceRoot}\MetasequoiaIME.ico
 Compression=lzma2
 SolidCompression=yes
@@ -88,6 +100,10 @@ Name: "{code:GetDataDir}\helpcodes\custom"
 Name: "{code:GetDataDir}\shuangpin\custom"
 
 [Files]
+#ifdef KasumiOffline
+Source: "VC_redist.x64.exe"; Flags: dontcopy
+Source: "original\KasumiSignedServer.exe"; Flags: dontcopy
+#endif
 ; 独立安装应用图标，供 Windows“已安装的应用”列表稳定显示。
 Source: "{#MySourceRoot}\MetasequoiaIME.ico"; \
     DestDir: "{commonpf64}\metasequoiaime"; Flags: ignoreversion
@@ -136,6 +152,11 @@ Source: "{#MySourceRoot}\tsf_dll\64\*.pdb"; \
 Source: "{#MySourceRoot}\server_exe\*"; \
     DestDir: "{commonpf64}\metasequoiaime\server"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
+
+#ifdef KasumiOffline
+; The standard Server is already installed. Use UIAccess only with a locally trusted signature.
+Source: "original\KasumiSignedServer.exe"; DestDir: "{commonpf64}\metasequoiaime\server"; DestName: "MetasequoiaImeServer.exe"; Flags: ignoreversion; Check: TrustsSignedServer
+#endif
 
 ; 内置皮肤的出厂清单（开关与完整外观）每次安装都整份覆盖：用户技术上能改，但不建议，升级会冲掉改动。
 ; 单独暂存在 default_skins，不经 app_data：skins 整个目录是用户数据，卸载时不删。
@@ -277,6 +298,9 @@ begin
   Result := Trim(Result);
 end;
 
+#ifdef KasumiOffline
+#include "kasumi_offline.iss"
+#else
 procedure OpenDownloadPage(const Url: String);
 var
   ErrorCode: Integer;
@@ -331,6 +355,8 @@ begin
     Result := False;
   end;
 end;
+
+#endif
 
 { 上一次安装（或历史版本）的数据目录。没有注册表值就是历史默认位置。}
 function ResolvePreviousDataDir: String;
@@ -1582,6 +1608,10 @@ var
 begin
   { 静默安装不会走向导页，/DATADIR= 传进来的值在这里才第一次被检查，
     有别的文件时同样改用子目录。向导里选的值已经换过一次，这里再换是空操作。}
+#ifdef KasumiOffline
+  Result := InstallBundledRuntime(NeedsRestart);
+  if Result <> '' then exit;
+#endif
   DataDirValue := AdoptableDataDir(GetDataDir(''));
   DataDirProblem := DataDirRejectionReason(GetDataDir(''));
   if DataDirProblem <> '' then

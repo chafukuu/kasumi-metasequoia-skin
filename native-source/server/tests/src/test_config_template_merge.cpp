@@ -86,9 +86,20 @@ TEST_CASE(input_state_shortcut_upgrade_preserves_custom_and_disabled_bindings)
             const std::string configured = legacy + std::string(definition.key) + " = \"" + binding + "\"\n";
             const auto merged = toml::parse(MergeConfigIntoTemplate(installed, configured, legacy));
             REQUIRE_EQ(merged["keybindings"][definition.key].value_or(std::string("missing")), binding);
-            REQUIRE(merged["keybindings"]["switch_language_shift"].value_or(false));
+            REQUIRE(!merged["keybindings"]["switch_language_shift"].value_or(true));
+            REQUIRE(merged["keybindings"]["switch_language_ctrl"].value_or(false));
         }
     }
+}
+
+TEST_CASE(shipped_language_toggle_default_uses_ctrl_only)
+{
+    std::ifstream input(MSIME_DEFAULT_CONFIG_PATH, std::ios::binary);
+    REQUIRE(static_cast<bool>(input));
+    const std::string installed((std::istreambuf_iterator<char>(input)), {});
+    const auto config = toml::parse(installed);
+    REQUIRE(!config["keybindings"]["switch_language_shift"].value_or(true));
+    REQUIRE(config["keybindings"]["switch_language_ctrl"].value_or(false));
 }
 
 TEST_CASE(config_merge_adds_default_caret_state_indicator)

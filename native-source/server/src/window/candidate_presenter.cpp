@@ -847,6 +847,15 @@ void CandidatePresenter::PlaceAndShow(POINT caret, float widthDip, float heightD
     const int cardLeftPx = static_cast<int>(std::lround(cardLeftDip * scale));
     const int cardTopPx = static_cast<int>(std::lround(cardTopDip * scale));
     const int cardHeightPx = (std::max)(1, static_cast<int>(std::ceil(cardHeightDip * scale)));
+    if (reserveMaxWidth_ && cardMaxWidthDip_ > 0.0f)
+    {
+        // Reserve transparent drawing capacity from the first show so card
+        // growth can reuse the surface. The portrait itself follows the live
+        // card edge in the scene, as does the card's hit region.
+        const int artworkRightPx =
+            AlignHostPixels(static_cast<int>(std::ceil((cardLeftDip + cardMaxWidthDip_ + kShadowPadRight) * scale)));
+        widthPx = (std::max)(widthPx, artworkRightPx);
+    }
     int x = properPos->first - cardLeftPx;
     int y = properPos->second - cardTopPx;
     const MonitorCoordinates monitor = GetMonitorCoordinatesFromPoint(caret);
@@ -1146,7 +1155,8 @@ bool CandidatePresenter::ConsumeTypedStarInput()
     impl_->typingStarEpoch = typingEvents.epoch;
     if (impl_->resources.AreAnimationsEnabled())
     {
-        impl_->scene.EmitTypedStarPairs(typingEvents.bursts, msimeui::DeviceResources::AnimationClock::now());
+        const auto time = msimeui::DeviceResources::AnimationClock::now();
+        impl_->scene.EmitTypedStarPairs(typingEvents.bursts, time);
         return typingEvents.bursts != 0 || epochChanged;
     }
     impl_->scene.ResetTypedStars();
@@ -1443,6 +1453,14 @@ bool CandidatePresenter::HandleMessage(UINT message, WPARAM wParam, LPARAM lPara
     }
     switch (message)
     {
+    case WM_SETTINGCHANGE: {
+        const bool previouslyAnimated = impl_->resources.AreAnimationsEnabled();
+        impl_->resources.SetAnimationsEnabled(skinAnimates_ && SystemAnimationsEnabled());
+        if (previouslyAnimated != impl_->resources.AreAnimationsEnabled() && ::is_global_wnd_cand_shown)
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        // The host can still handle other system settings carried by this message.
+        return false;
+    }
     case kCandidateAnimationFrameMessage:
         if (impl_->animationScheduler.ConsumeMessage(wParam, lParam))
         {

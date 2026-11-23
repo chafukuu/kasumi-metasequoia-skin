@@ -139,6 +139,10 @@ foreground_right_clip_dip = 137.695027624309
 
 挂件不参与布局，也不接收点击；伸到面板外面时要用 `outer_insets_dip` 给窗口留出空白。
 
+### `[candidate_window.livesd]` 的右边界（v2 可选）
+
+`right_boundary_inset_dip` 为中文自动移动的右边界相对候选卡实际右端向左的距离，接受 `0`–`4096` 的有限数值，默认 `0`。例如右侧前景人物左轮廓距卡片右端 `193.38 DIP` 时设置为 `193.38`，LiveSD 到该轮廓前折返。候选卡伸缩或舞台因屏幕边缘左移时，边界跟随卡片的实际坐标；全屏拖动和英文显示器范围不受此项限制。极窄候选保留至少 `1 DIP` 的区间，并等比缩小可见人物以避免反向边界。
+
 ### 动图（v2）
 
 v2 皮肤里的图片可以是动图：APNG（按 [APNG 规范](https://wiki.mozilla.org/APNG_Specification) 解码）、GIF，以及系统 WebP 解码器能逐帧读出的动画 WebP（每帧 100 ms）。

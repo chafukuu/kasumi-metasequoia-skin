@@ -25,8 +25,8 @@ void RefreshPunctuationLockFromConfig();
 
 struct SwitchLanguageHotkeys
 {
-    bool shift = true;
-    bool ctrl = false;
+    bool shift = false;
+    bool ctrl = true;
     bool ctrl_alt_space = true;
     bool character_set_ctrl_shift_f = true;
     FanyImeInputStateShortcuts::Snapshot input_state;

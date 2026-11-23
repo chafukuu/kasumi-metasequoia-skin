@@ -148,7 +148,7 @@ STDAPI CMetasequoiaIME::OnSetThreadFocus()
 
 STDAPI CMetasequoiaIME::OnKillThreadFocus()
 {
-    _CancelLiveSDActivity(true);
+    _OnLiveSDThreadFocusLost();
     if (!IsNamedpipeFocusStateOwner(this) || !Global::g_connected)
     {
         return S_OK;

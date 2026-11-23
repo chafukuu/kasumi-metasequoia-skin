@@ -129,7 +129,7 @@ bool ClientNegotiatedCompositionRestore(uint64_t client_id);
 // True only for a versioned client that advertised CaretStateIndicator, i.e.
 // its character-set shortcut KeyEvent carries a caret anchor in point[].
 bool ClientNegotiatedCaretStateIndicator(uint64_t client_id);
-bool ClientNegotiatedLiveSDActivity(uint64_t client_id);
+bool ClientNegotiatedLiveSDActivity(uint64_t client_id, std::uint32_t kind);
 bool ClientNegotiatedLiveSDTypingCadence(uint64_t client_id);
 // Only clients that advertised the dedicated cycle reply can receive it.
 bool ClientNegotiatedTrilingualCycle(uint64_t client_id);

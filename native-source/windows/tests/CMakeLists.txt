@@ -81,6 +81,19 @@ add_test(NAME focus_announcement_policy COMMAND test_focus_announcement_policy)
 # Regenerate the fixture when either handler changes, so a missing recovery step
 # cannot be hidden by a copied implementation in the test.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(livesd_activity_source "${CMAKE_CURRENT_SOURCE_DIR}/../src/IME/MetasequoiaIME_LiveSD.cpp")
+set(livesd_activity_fixture_generator "${CMAKE_CURRENT_SOURCE_DIR}/generate_livesd_activity_fixture.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${livesd_activity_source}" "${livesd_activity_fixture_generator}")
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${livesd_activity_fixture_generator}"
+        "${livesd_activity_source}" "${CMAKE_CURRENT_BINARY_DIR}/livesd_activity_source.h"
+    COMMAND_ERROR_IS_FATAL ANY)
+add_executable(test_livesd_activity livesd_activity.cpp)
+target_include_directories(test_livesd_activity PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_features(test_livesd_activity PRIVATE cxx_std_17)
+add_test(NAME livesd_activity COMMAND test_livesd_activity)
+
 set(reconnect_window_source "${CMAKE_CURRENT_SOURCE_DIR}/../src/IME/MetasequoiaIME_WindowProc.cpp")
 set(reconnect_key_source "${CMAKE_CURRENT_SOURCE_DIR}/../src/Key/KeyEventSink_DeferredKeys.cpp")
 set(reconnect_fixture_generator "${CMAKE_CURRENT_SOURCE_DIR}/generate_reconnect_fixture.py")
@@ -129,3 +142,12 @@ add_executable(test_commit_reply_not_ready commit_reply_not_ready.cpp)
 target_include_directories(test_commit_reply_not_ready PRIVATE ../src "${CMAKE_CURRENT_BINARY_DIR}")
 target_compile_features(test_commit_reply_not_ready PRIVATE cxx_std_17)
 add_test(NAME commit_reply_not_ready COMMAND test_commit_reply_not_ready)
+
+# Test/actual callback pairing stays independent of TSF, host UI and pipe state.
+add_executable(test_livesd_key_observation livesd_key_observation.cpp)
+target_include_directories(test_livesd_key_observation PRIVATE ../src)
+target_compile_features(test_livesd_key_observation PRIVATE cxx_std_17)
+if(MSVC)
+    target_compile_options(test_livesd_key_observation PRIVATE /EHsc)
+endif()
+add_test(NAME livesd_key_observation COMMAND test_livesd_key_observation)

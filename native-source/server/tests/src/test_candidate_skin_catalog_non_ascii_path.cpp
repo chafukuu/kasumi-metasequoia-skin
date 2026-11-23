@@ -530,7 +530,15 @@ TEST_CASE(candidate_band_artwork_keeps_left_texture_fixed_and_moves_right_foregr
         REQUIRE_EQ(geometry->foregroundDestination.y, geometry->backgroundDestination.y);
         REQUIRE_EQ(geometry->foregroundDestination.width, 1032.0f);
         REQUIRE_EQ(geometry->foregroundDestination.height, 344.0f);
+
+        const auto reserved = CandidateBandArtworkGeometryFromBounds({x, y, cardWidth, 96.5f}, 1032.0f, 344.0f,
+                                                                     -219.75f, rightClip, 1032.0f);
+        REQUIRE(reserved.has_value());
+        REQUIRE_EQ(reserved->foregroundDestination.x, x);
+        REQUIRE_EQ(reserved->foregroundDestination.width, 1032.0f);
     }
+    REQUIRE(
+        !CandidateBandArtworkGeometryFromBounds({x, y, 1032.0f, 96.5f}, 1032.0f, 344.0f, -219.75f, rightClip, 1031.0f));
 }
 
 TEST_CASE(candidate_band_artwork_clips_narrow_background_and_rejects_invalid_geometry)

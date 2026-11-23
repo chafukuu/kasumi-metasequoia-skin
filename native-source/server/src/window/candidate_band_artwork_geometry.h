@@ -16,13 +16,16 @@ struct CandidateBandArtworkGeometryDip
 // The full-size art never stretches with the card. Only the background clip
 // and the right-anchored foreground position depend on the current card width.
 inline std::optional<CandidateBandArtworkGeometryDip> CandidateBandArtworkGeometryFromBounds(
-    const CandidateItemRectDip &card, float widthDip, float heightDip, float offsetYDip, float foregroundRightClipDip)
+    const CandidateItemRectDip &card, float widthDip, float heightDip, float offsetYDip, float foregroundRightClipDip,
+    float reservedRightAnchorDip = 0.0f)
 {
     if (!std::isfinite(card.x) || !std::isfinite(card.y) || !std::isfinite(card.width) || !std::isfinite(card.height) ||
         card.width <= 0.0f || card.height <= 0.0f || !std::isfinite(widthDip) || !std::isfinite(heightDip) ||
-        !std::isfinite(offsetYDip) || !std::isfinite(foregroundRightClipDip) || widthDip <= 0.0f ||
-        widthDip > 4096.0f || heightDip <= 0.0f || heightDip > 4096.0f || std::abs(offsetYDip) > 4096.0f ||
-        foregroundRightClipDip < 0.0f || foregroundRightClipDip > widthDip)
+        !std::isfinite(offsetYDip) || !std::isfinite(foregroundRightClipDip) ||
+        !std::isfinite(reservedRightAnchorDip) || widthDip <= 0.0f || widthDip > 4096.0f || heightDip <= 0.0f ||
+        heightDip > 4096.0f || std::abs(offsetYDip) > 4096.0f || foregroundRightClipDip < 0.0f ||
+        foregroundRightClipDip > widthDip || reservedRightAnchorDip < 0.0f || reservedRightAnchorDip > 4096.0f ||
+        (reservedRightAnchorDip > 0.0f && reservedRightAnchorDip < card.width))
         return std::nullopt;
     const float y = card.y + offsetYDip;
     const float right = card.x + card.width;
@@ -31,5 +34,6 @@ inline std::optional<CandidateBandArtworkGeometryDip> CandidateBandArtworkGeomet
     return CandidateBandArtworkGeometryDip{
         {card.x, y, widthDip, heightDip},
         {card.x, y, (std::max)(card.width - foregroundRightClipDip, 0.0f), heightDip},
-        {right - widthDip, y, widthDip, heightDip}};
+        {card.x + (reservedRightAnchorDip > 0.0f ? reservedRightAnchorDip : card.width) - widthDip, y, widthDip,
+         heightDip}};
 }

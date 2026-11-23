@@ -115,6 +115,12 @@ class CandidateAnimationScheduler
         return highResolution_;
     }
 
+    Clock::time_point ScheduledDeadline()
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return deadline_;
+    }
+
   private:
     static UINT_PTR NextInstance()
     {

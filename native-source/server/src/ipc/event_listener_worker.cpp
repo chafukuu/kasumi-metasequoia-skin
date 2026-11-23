@@ -58,6 +58,17 @@ int EnsureAuthoritativeCnMode()
     return g_authoritative_cn_mode;
 }
 
+bool IsEnglishInputModeForClient(std::uint64_t clientId)
+{
+    const int snapshot = RecallClientStatusSnapshot(clientId);
+    if (snapshot >= 0)
+        return (snapshot & (1 << 2)) == 0;
+    if (IsConfiguredImeModeScopeGlobal())
+        return EnsureAuthoritativeCnMode() == 0;
+    ReloadImeConfigIfChanged();
+    return GetConfiguredDefaultImeMode() == "english";
+}
+
 void PostCaretStatePosition(int x, int y)
 {
     const HWND hwnd = ::global_hwnd_caret_state;
@@ -327,12 +338,15 @@ void WorkerThread()
             break;
 
         case TaskType::LiveSDActivity:
-            // A TypingPulse may intentionally carry the unresolved-caret
+            // A TypingPulse or pin command may intentionally carry the unresolved-caret
             // sentinel. LiveSDHost uses it only to animate the existing,
             // already-owned companion window; it must never become a new
             // placement anchor.
             if (task.pipe_data.keycode == FanyImeLiveSDActivity::TypingPulse ||
                 task.pipe_data.keycode == FanyImeLiveSDActivity::EnterAction ||
+                task.pipe_data.keycode == FanyImeLiveSDActivity::PinPosition ||
+                task.pipe_data.keycode == FanyImeLiveSDActivity::ComboTyping ||
+                task.pipe_data.keycode == FanyImeLiveSDActivity::ComboReset ||
                 task.pipe_data.keycode == FanyImeLiveSDActivity::Blur ||
                 (task.pipe_data.point[1] != Global::INVALID_Y &&
                  MonitorFromPoint({task.pipe_data.point[0], task.pipe_data.point[1]}, MONITOR_DEFAULTTONULL)))
@@ -341,7 +355,8 @@ void WorkerThread()
                                           task.pipe_data.keycode,
                                           {task.pipe_data.point[0], task.pipe_data.point[1]},
                                           reinterpret_cast<HWND>(static_cast<UINT_PTR>(task.pipe_data.request_id)),
-                                          task.pipe_data.modifiers_down});
+                                          task.pipe_data.modifiers_down,
+                                          IsEnglishInputModeForClient(task.client_id)});
             break;
 
         case TaskType::MoveCandidate: {
@@ -606,6 +621,7 @@ void WorkerThread()
                 ClearState();
             }
             RememberClientStatusSnapshot(task.client_id, packed_state);
+            LiveSDHost::PostInputModeState(task.client_id, task.activation_epoch, effective_cn == 0);
             PublishStatusSnapshotValue(packed_state);
             break;
         }

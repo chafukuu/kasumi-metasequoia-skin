@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <optional>
@@ -170,7 +171,7 @@ struct ItemSeparators
     double lineGapDip = 0.0;
 };
 
-// 固定比例的横排飘带：背景固定在左侧并裁去右端，前景整图随卡片右端移动。
+// 固定比例的横排飘带：背景固定在左侧并裁去右端；前景对齐卡片右端，启用 max-width 预留时与其右端对齐。
 // 两层都在同一候选窗口内、文字之前绘制，不参与测量或命中测试。
 struct BandArtwork
 {
@@ -215,6 +216,19 @@ struct TypedStars
     double pairSeparationDip = 22.0;
 };
 
+// Optional, upright counter following the companion foot center. Every coordinate is a DIP.
+struct LiveSDCombo
+{
+    std::array<std::string, 10> digitImages;
+    std::string labelImage;
+    double digitHeightDip = 32.0;
+    double slotWidthDip = 26.0;
+    double labelHeightDip = 12.0;
+    double labelGapDip = 2.0;
+    double offsetXDip = 0.0;
+    double offsetYDip = -200.0;
+};
+
 // Optional v2 realtime companion. Stage and sprite dimensions use DIPs; the anchor is the sprite foot center.
 struct LiveSD
 {
@@ -229,6 +243,10 @@ struct LiveSD
     double widthDip = 161.28;
     double heightDip = 185.472;
     double footYDip = 233.0;
+    // Optional inset from the actual candidate-card right edge to the right
+    // travel limit. Kasumi uses the Q-version portrait's left edge.
+    double rightBoundaryInsetDip = 0.0;
+    std::optional<LiveSDCombo> combo;
 };
 
 struct Package
